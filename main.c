@@ -158,9 +158,9 @@ const char* get_desc_mfg_code(unsigned int mfg_code) {
 }
 
 struct waveform_data_header {
-	unsigned int checksum:32; // 0
-	unsigned int filesize:32; // 4
-	unsigned int serial:32; // 8 serial number
+  unsigned int checksum:32; // 0
+  unsigned int filesize:32; // 4
+  unsigned int serial:32; // 8 serial number
   unsigned int run_type:8; // 12
   unsigned int fpl_platform:8; // 13
   unsigned int fpl_lot:16; // 14
@@ -173,22 +173,22 @@ struct waveform_data_header {
   unsigned int waveform_tuning_bias_or_rev:8; // 22
   unsigned int fpl_rate:8; // 23
   unsigned int unknown0:32; // 24
-	unsigned int xwia:24; // extra waveform information
-	unsigned int cs1:8; // checksum 1
-	unsigned int wmta:24;
-	unsigned int fvsn:8;
-	unsigned int luts:8;
-	unsigned int mc:8; // mode count (length of mode table - 1)
-	unsigned int trc:8; // temperature range count (length of temperature table - 1)
-	unsigned int reserved0_0:8;
-	unsigned int eb:8;
-	unsigned int sb:8;
-	unsigned int reserved0_1:8;
-	unsigned int reserved0_2:8;
-	unsigned int reserved0_3:8;
-	unsigned int reserved0_4:8;
-	unsigned int reserved0_5:8;
-	unsigned int cs2:8; // checksum 2
+  unsigned int xwia:24; // extra waveform information
+  unsigned int cs1:8; // checksum 1
+  unsigned int wmta:24;
+  unsigned int fvsn:8;
+  unsigned int luts:8;
+  unsigned int mc:8; // mode count (length of mode table - 1)
+  unsigned int trc:8; // temperature range count (length of temperature table - 1)
+  unsigned int reserved0_0:8;
+  unsigned int eb:8;
+  unsigned int sb:8;
+  unsigned int reserved0_1:8;
+  unsigned int reserved0_2:8;
+  unsigned int reserved0_3:8;
+  unsigned int reserved0_4:8;
+  unsigned int reserved0_5:8;
+  unsigned int cs2:8; // checksum 2
 };
 
 void print_header(struct waveform_data_header* header) {

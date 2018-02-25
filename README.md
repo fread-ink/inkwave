@@ -5,6 +5,18 @@ inkwave is a command-line utility for converting `.wbf` to `.wrf` files and disp
 
 `.wbf` is the format stored on the flash chip present on the ribbon cable of some electronic paper displays made by the E Ink Corporation and `.wrf` is the input format used by the i.MX 508 EPDC (electronic paper display controller).
 
+# Compiling
+
+```
+make
+```
+
+# Usage
+
+```
+inkwave waveform.wbf
+```
+
 # License and copyright
 
 License: GPLv2
