@@ -4,7 +4,11 @@
 #include <stdint.h>
 #include <errno.h>
 #include <string.h>
+#include <unistd.h>
 #include <sys/stat.h>
+
+// there probably aren't any displays with more waveforms than this (we hope)
+#define MAX_WAVEFORMS (4096)
 
 /*
 
@@ -208,6 +212,47 @@ struct temp_range {
   uint8_t to;
 };
 
+int bubble_sort(uint32_t* wav_addrs) {
+  uint32_t i;
+  uint32_t j;
+  uint32_t tmp;
+
+  if(!wav_addrs) return 0;
+
+  for(i=0; i < MAX_WAVEFORMS; i++) {
+    if(!wav_addrs[i]) break; // zero value means end of array
+
+    for(j=0; j < MAX_WAVEFORMS; j++) {
+      if(!wav_addrs[j]) break; // zero value means end of array
+
+      if(i == j) continue;
+
+      if((i < j && wav_addrs[i] > wav_addrs[j]) || (i > j && wav_addrs[i] < wav_addrs[j])) {
+        tmp = wav_addrs[i];
+        wav_addrs[i] = wav_addrs[j];
+        wav_addrs[j] = tmp;
+      }
+    }
+  }
+  return i; // return length
+}
+
+int add_wav_addr(uint32_t* wav_addrs, uint32_t addr) {
+  uint32_t i;
+
+  for(i=0; i < MAX_WAVEFORMS; i++) {
+    if(wav_addrs[i] == addr) {
+      return 0; // this address was already in the array
+    }
+    if(!wav_addrs[i]) {
+      wav_addrs[i] = addr;
+      return 1; // added
+    }
+  }
+  fprintf(stderr, "Encountered more waveforms than our hardcoded max of %u\n", MAX_WAVEFORMS);
+  return -1;
+}
+
 void print_header(struct waveform_data_header* header) {
   printf("Header info:\n");
   printf("  File size (according to header): %d bytes\n", header->filesize);
@@ -257,7 +302,7 @@ void print_header(struct waveform_data_header* header) {
 }
 
 
-int parse_temp_ranges(char* tr_start, uint8_t tr_count, int do_print) {
+int parse_temp_ranges(char* tr_start, uint8_t tr_count, uint32_t* wav_addrs, int do_print) {
   struct pointer* tr;
   uint8_t checksum;
   uint8_t i;
@@ -285,14 +330,17 @@ int parse_temp_ranges(char* tr_start, uint8_t tr_count, int do_print) {
     if(do_print) {
       printf("Passed\n");
     }
+    if(add_wav_addr(wav_addrs, tr->addr) < 0) {
+      return -1;
+    }
     tr_start += 4;
   }
-
+  printf("\n");
   return 0;
 }
 
 
-int parse_modes(char* data, char* mode_start, uint8_t mode_count, uint8_t temp_range_count, int do_print) {
+int parse_modes(char* data, char* mode_start, uint8_t mode_count, uint8_t temp_range_count, uint32_t* wav_addrs, int do_print) {
   struct pointer* mode;
   uint8_t checksum;
   uint8_t i;
@@ -320,7 +368,7 @@ int parse_modes(char* data, char* mode_start, uint8_t mode_count, uint8_t temp_r
     if(do_print) {
       printf("Passed\n");
     }
-    parse_temp_ranges(data + mode->addr, temp_range_count, do_print);
+    parse_temp_ranges(data + mode->addr, temp_range_count, wav_addrs, do_print);
     
     mode_start += 4;
   }
@@ -399,7 +447,18 @@ int check() {
 }
 
 void usage(FILE* fd) {
-  fprintf(fd, "Usage: inkwave filename.wbf -o [output.wrf]\n");
+  fprintf(fd, "\n");
+  fprintf(fd, "Usage: inkwave file.wbf/file.wrf [-o output.wrf]\n");
+  fprintf(fd, "\n");
+  fprintf(fd, "  Convert a .wbf file to a .wrf file\n");
+  fprintf(fd, "  or if no output file is specified display human\n");
+  fprintf(fd, "  readable info about the specified .wbf or .wrf file.\n");
+  fprintf(fd, "\n");
+  fprintf(fd, "Options:\n");
+  fprintf(fd, "  -f wrf/wbf: Force inkwave to interpret input file\n");
+  fprintf(fd, "              as either .wrf or .wbf format\n");
+  fprintf(fd, "              regardless of file extension.\n");
+  fprintf(fd, "\n");
 }
 
 
@@ -407,7 +466,7 @@ int main(int argc, char **argv) {
 
   char* data;
   char* infile_path;
-  FILE* infile;
+  FILE* infile = NULL;
   size_t len;
   struct waveform_data_header* header; // points to `data` at beginning of header
   struct stat st;
@@ -416,32 +475,78 @@ int main(int argc, char **argv) {
   uint32_t xwia_len;
   uint8_t mode_count;
   uint8_t temp_range_count;
+  char* outfile_path = NULL;
+  FILE* outfile = NULL;
+  char* force_input = NULL;
+  int do_print = 0;
+  int force = 0;
+  int c;
+  uint32_t unique_waveform_count;
+  uint32_t wav_addrs[MAX_WAVEFORMS]; // waveform addresses
+  
+  memset(wav_addrs, 0, sizeof(wav_addrs));
 
-  int do_print = 1;
+  while((c = getopt(argc, argv, "o:f:h")) != -1) {
+    switch (c) {
+    case 'o':
+      outfile_path = optarg;
+      break;
+    case 'f':
+      force_input = optarg;
+      break;
+    case 'h':
+      usage(stdout);
+      return 0;
+    }
+  }
 
-  if(argc != 2) {
+  // expecting exactly one non-option argument
+  if(argc != optind + 1) {
     usage(stderr);
     return 1;
   }
 
-  infile_path = argv[1];
+  infile_path = argv[optind];
+
+  if(force_input) {
+    if(strncmp(force_input, "wbf", 3)) {
+      fprintf(stderr, "Currently only .wbf input files are supported.\n");
+      goto fail;
+    }
+  } else if(strncmp(infile_path + strlen(infile_path) - 4, ".wbf", 4)) {
+    fprintf(stderr, "Currently only .wbf input files are supported.\n");
+    fprintf(stderr, "The input format is detected based on file extension.\n");
+    fprintf(stderr, "Consider using `-f wbf` to bypass this detection.\n");
+    goto fail;    
+  }
 
   infile = fopen(infile_path, "r");
   if(!infile) {
     fprintf(stderr, "Opening file %s failed: %s\n", infile_path, strerror(errno));
-    return 1;
+    goto fail;
   }
-
 
   if(stat(infile_path, &st) < 0) {
     fprintf(stderr, "Error getting file size for: %s\n", strerror(errno));
-    return 1;
+    goto fail;
   }
 
   data = malloc(st.st_size);
   if(!data) {
     fprintf(stderr, "Failed to allocate %d bytes of memory: %s\n", (int) st.st_size, strerror(errno));
-    return 1;
+    goto fail;
+  }
+
+  if(outfile_path) {
+    outfile = fopen(outfile_path, "w");
+    if(!outfile) {
+      fprintf(stderr, "Opening file %s for writing failed: %s\n", outfile_path, strerror(errno));
+      goto fail;
+    }
+  }
+
+  if(!outfile) {
+    do_print = 1;
   }
 
   if(do_print) {
@@ -450,15 +555,19 @@ int main(int argc, char **argv) {
     printf("\n");
   }
 
-
   len = fread(data, 1, st.st_size, infile);
   if(len <= 0) {
     fprintf(stderr, "Reading file %s failed: %s\n", infile_path, strerror(errno));
-    return 1;
+    goto fail;
   }
 
   // start of header
   header = (struct waveform_data_header*) data;
+
+  if(header->filesize != st.st_size) {
+    fprintf(stderr, "Actual file size does not match file size reported by waveform header\n");
+    goto fail;
+  }
 
   if(do_print) {
     print_header(header);
@@ -469,7 +578,7 @@ int main(int argc, char **argv) {
 
   if(check_temp_range_table(temp_range_table, header->trc + 1, do_print)) {
     fprintf(stderr, "Temperature range checksum error\n");
-    return 1;    
+    goto fail;   
   }
 
   if(header->xwia) { // if xwia is 0 then there is no xwia info
@@ -477,7 +586,7 @@ int main(int argc, char **argv) {
 
     if(check_xwia(data + header->xwia, do_print) < 0) {
       fprintf(stderr, "xwia checksum error\n");
-      return 1;
+      goto fail;
     }
   } else {
     xwia_len = 0;
@@ -487,11 +596,33 @@ int main(int argc, char **argv) {
   // last byte after xwia is a checksum
   modes = data + header->xwia + 1 + xwia_len + 1;
 
-  if(parse_modes(data, modes, header->mc + 1, header->trc + 1, do_print) < 0) {
+  if(parse_modes(data, modes, header->mc + 1, header->trc + 1, wav_addrs, do_print) < 0) {
     fprintf(stderr, "Mode checksum error\n");
-    return 1;    
+    goto fail; 
+  }
+
+  unique_waveform_count = bubble_sort(wav_addrs);
+  if(do_print) {
+    printf("Number of unique waveforms: %u\n\n", unique_waveform_count);
   }
   
+  // add file endpoint to waveform address table
+  // since we use this to determine end address of each waveform
+  if(add_wav_addr(wav_addrs, st.st_size) < 0) {
+    fprintf(stderr, "Failed to add file end address to waveform table.\n");
+    goto fail;
+  }
+
+  // TODO actually write output file
 
   return 0;
+
+ fail:
+  if(infile) {
+    fclose(infile);
+  }
+  if(outfile) {
+    fclose(outfile);
+  }
+  return 1;
 }
