@@ -28,7 +28,7 @@ The following is format info gleaned from open source header files that hasn't y
 
 typedef struct {
   uint32_t key;
-  const char val[64];
+  const char* val;
 } Pair;
 
 Pair mfg_codes[] = {
@@ -45,9 +45,9 @@ Pair mfg_codes[] = {
   {0xA3, "LB060S03-RD02 (LGD Tequila Line 1)"},
   {0xA4, "2nd LGD Tequila Line"},
   {0xA5, "LB060S05-RD02 (LGD Whitney Line 1)"},
-  {0xA6, "2nd LGD Whitney Line"}
+  {0xA6, "2nd LGD Whitney Line"},
+  {0x00, NULL}
 };
-unsigned int mfg_codes_size = sizeof(mfg_codes) / sizeof(Pair);
 
 Pair run_types[] = {
   {0x00, "[B]aseline"},
@@ -66,9 +66,9 @@ Pair run_types[] = {
   {0x0D, "K"},
   {0x0E, "L"},
   {0x0F, "M"},
-  {0x10, "N"}
+  {0x10, "N"},
+  {0x00, NULL}
 };
-unsigned int run_types_size = sizeof(run_types) / sizeof(Pair);
 
 Pair fpl_platforms[] = {
   {0x00, "2.0"},
@@ -78,9 +78,9 @@ Pair fpl_platforms[] = {
   {0x04, "V110A"},
   {0x06, "V220"},
   {0x07, "V250"},
-  {0x08, "V220E"}
+  {0x08, "V220E"},
+  {0x00, NULL}
 };
-unsigned int fpl_platforms_size = sizeof(fpl_platforms) / sizeof(Pair);
 
 Pair fpl_sizes[] = {
   {0x32, "5\", unknown resolution"},
@@ -89,16 +89,16 @@ Pair fpl_sizes[] = {
   {0x3F, "6\", 800x600"},
   {0x50, "8\", unknown resolution"},
   {0x61, "9.7\", 1200x825"},
-  {0x63, "9.7\", 1600x1200"}
+  {0x63, "9.7\", 1600x1200"},
+  {0x00, NULL}
 };
-unsigned int fpl_sizes_size = sizeof(fpl_sizes) / sizeof(Pair);
 
 Pair fpl_rates[] = {
   {0x50, "50Hz"},
   {0x60, "60Hz"},
-  {0x85, "85Hz"}
+  {0x85, "85Hz"},
+  {0x00, NULL}
 };
-unsigned int fpl_rates_size = sizeof(fpl_rates) / sizeof(Pair);
 
 Pair mode_versions[] = {
   {0x00, "MU/GU/GC/PU (V100 modes)"},
@@ -107,9 +107,9 @@ Pair mode_versions[] = {
   {0x03, "DU/GC16/GC4/AU (V220, 50Hz/85Hz modes)"},
   {0x04, "DU/GC16/AU (V220, 85Hz modes)"},
   {0x06, "? (V220, 210 dpi, 85Hz modes)"},
-  {0x07, "? (V220, 210 dpi, 85Hz modes)"}
+  {0x07, "? (V220, 210 dpi, 85Hz modes)"},
+  {0x00, NULL}
 };
-unsigned int mode_versions_size = sizeof(mode_versions) / sizeof(Pair);
 
 
 Pair waveform_types[] = {
@@ -119,32 +119,36 @@ Pair waveform_types[] = {
   {0x16, "WK"},
   {0x17, "WL"},
   {0x18, "VJ"},
-  {0x2B, "WR"}
+  {0x2B, "WR"},
+  {0x00, NULL}
 };
-unsigned int waveform_types_size = sizeof(waveform_types) / sizeof(Pair);
 
 
 Pair waveform_tuning_biases[] = {
   {0x00, "Standard"},
   {0x01, "Increased DS Blooming V110/V110E"},
-  {0x02, "Increased DS Blooming V220/V220E"}
+  {0x02, "Increased DS Blooming V220/V220E"},
+  {0x00, NULL}
 };
-unsigned int waveform_tuning_biases_size = sizeof(waveform_tuning_biases) / sizeof(Pair);
 
-// get human readable descriptor
-const char* get_desc(Pair table[], unsigned int table_size,  unsigned int key, const char* def) {
-  int i;
-
-  for(i=0; i < table_size; i++) {
+const char* get_desc(Pair table[], unsigned int key, const char* def) {
+  int i = 0;
+  while(table[i].key || table[i].val) {
     if(table[i].key == key) {
       return table[i].val;
     }
+    i++;
   }
-  return def;
+  if(def) {
+    return def;
+  } else {
+    return "Unknown";
+  }
 }
 
+
 const char* get_desc_mfg_code(unsigned int mfg_code) {
-  const char* desc = get_desc(mfg_codes, mfg_codes_size, mfg_code, NULL);
+  const char* desc = get_desc(mfg_codes, mfg_code, NULL);
 
   if(desc) return desc;
 
@@ -156,6 +160,7 @@ const char* get_desc_mfg_code(unsigned int mfg_code) {
 
   return "Unknown code\0";
 }
+
 
 struct waveform_data_header {
   unsigned int checksum:32; // 0
@@ -189,30 +194,31 @@ struct waveform_data_header {
   unsigned int reserved0_4:8;
   unsigned int reserved0_5:8;
   unsigned int cs2:8; // checksum 2
-};
+}__attribute__((packed));
+
 
 void print_header(struct waveform_data_header* header) {
   printf("File size (according to header): %d bytes\n", header->filesize);
   printf("Serial number: %d\n", header->serial);
-  printf("Run type: 0x%x | %s\n", header->run_type, get_desc(run_types, run_types_size, header->run_type, "Unknown"));
+  printf("Run type: 0x%x | %s\n", header->run_type, get_desc(run_types, header->run_type, NULL));
   printf("Manufacturer code: 0x%x | %s\n", header->mfg_code, get_desc_mfg_code(header->mfg_code));
 
-  printf("Frontplane Laminate (FPL) platform: 0x%x | %s\n", header->fpl_platform, get_desc(fpl_platforms, fpl_platforms_size, header->fpl_platform, "Unknown"));
+  printf("Frontplane Laminate (FPL) platform: 0x%x | %s\n", header->fpl_platform, get_desc(fpl_platforms, header->fpl_platform, NULL));
   printf("Frontplane Laminate (FPL) lot: %d\n", header->fpl_lot);
-  printf("Frontplane Laminate (FPL) size: 0x%x | %s\n", header->fpl_size, get_desc(fpl_sizes, fpl_sizes_size, header->fpl_size, "Unknown"));
-  printf("Frontplane Laminate (FPL) rate: 0x%x | %s\n", header->fpl_rate, get_desc(fpl_rates, fpl_rates_size, header->fpl_rate, "Unknown"));
+  printf("Frontplane Laminate (FPL) size: 0x%x | %s\n", header->fpl_size, get_desc(fpl_sizes, header->fpl_size, NULL));
+  printf("Frontplane Laminate (FPL) rate: 0x%x | %s\n", header->fpl_rate, get_desc(fpl_rates, header->fpl_rate, NULL));
 
   printf("Waveform version: %d\n", header->waveform_version);
   printf("Waveform sub-version: %d\n", header->waveform_subversion);
 
-  printf("Waveform type: 0x%x | %s\n", header->waveform_type, get_desc(waveform_types, waveform_types_size, header->waveform_type, "Unknown"));
+  printf("Waveform type: 0x%x | %s\n", header->waveform_type, get_desc(waveform_types, header->waveform_type, NULL));
 
   // if waveform_type is WJ or earlier 
   // then waveform_tuning_bias_or_rev is the tuning bias.
   // if it is WR type or later then it is the revision.
   // if it is in between then we don't know.
   if(header->waveform_type <= 0x15) { // WJ type or earlier
-    printf("Waveform tuning bias: 0x%x | %s\n", header->waveform_tuning_bias_or_rev, get_desc(waveform_tuning_biases, waveform_tuning_biases_size, header->waveform_tuning_bias_or_rev, "Unknown"));
+    printf("Waveform tuning bias: 0x%x | %s\n", header->waveform_tuning_bias_or_rev, get_desc(waveform_tuning_biases, header->waveform_tuning_bias_or_rev, NULL));
     printf("Waveform revision: Unknown\n");    
   } else if(header->waveform_type >= 0x2B) { // WR type or later
     printf("Waveform tuning bias: Unknown\n");
@@ -229,7 +235,7 @@ void print_header(struct waveform_data_header* header) {
     printf("Mode version: Unknown\n");
   } else {
     printf("Adhesive run number: Unknown\n");
-    printf("Mode version: 0x%x | %s\n", header->mode_version_or_adhesive_run_num, get_desc(mode_versions, mode_versions_size, header->mode_version_or_adhesive_run_num, "Unknown"));
+    printf("Mode version: 0x%x | %s\n", header->mode_version_or_adhesive_run_num, get_desc(mode_versions, header->mode_version_or_adhesive_run_num, NULL));
   }
 
   printf("Number of modes in this waveform: %d\n", header->mc + 1);
@@ -274,6 +280,8 @@ int main(int argc, char **argv) {
     fprintf(stderr, "Reading file %s failed: %s\n", infile_path, strerror(errno));
     return 1;
   }
+
+  // TODO handle endianness
 
   print_header(&header);
 
