@@ -278,12 +278,12 @@ int parse_temp_ranges(char* tr_start, uint8_t tr_count, int do_print) {
     checksum = tr_start[0] + tr_start[1] + tr_start[2];
     if(checksum != tr->checksum) {
       if(do_print) {
-      printf("    Failed\n");
+      printf("Failed\n");
       }
       return -1;
     }
     if(do_print) {
-      printf("    Passed\n");
+      printf("Passed\n");
     }
     tr_start += 4;
   }
@@ -366,7 +366,7 @@ int check_temp_range_table(char* table, uint8_t range_count, int do_print) {
   }
 
   if(do_print) {
-    printf("Temperature range table:\n");
+    printf("Supported temperature ranges:\n");
   }
 
   checksum = 0;
