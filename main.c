@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <errno.h>
 #include <string.h>
+#include <sys/stat.h>
 
 /*
 
@@ -163,84 +164,231 @@ const char* get_desc_mfg_code(unsigned int mfg_code) {
 
 
 struct waveform_data_header {
-  unsigned int checksum:32; // 0
-  unsigned int filesize:32; // 4
-  unsigned int serial:32; // 8 serial number
-  unsigned int run_type:8; // 12
-  unsigned int fpl_platform:8; // 13
-  unsigned int fpl_lot:16; // 14
-  unsigned int mode_version_or_adhesive_run_num:8; // 16
-  unsigned int waveform_version:8; // 17
-  unsigned int waveform_subversion:8; // 18
-  unsigned int waveform_type:8; // 19
-  unsigned int fpl_size:8; // 20
-  unsigned int mfg_code:8; // 21
-  unsigned int waveform_tuning_bias_or_rev:8; // 22
-  unsigned int fpl_rate:8; // 23
-  unsigned int unknown0:32; // 24
-  unsigned int xwia:24; // extra waveform information
-  unsigned int cs1:8; // checksum 1
-  unsigned int wmta:24;
-  unsigned int fvsn:8;
-  unsigned int luts:8;
-  unsigned int mc:8; // mode count (length of mode table - 1)
-  unsigned int trc:8; // temperature range count (length of temperature table - 1)
-  unsigned int reserved0_0:8;
-  unsigned int eb:8;
-  unsigned int sb:8;
-  unsigned int reserved0_1:8;
-  unsigned int reserved0_2:8;
-  unsigned int reserved0_3:8;
-  unsigned int reserved0_4:8;
-  unsigned int reserved0_5:8;
-  unsigned int cs2:8; // checksum 2
+  uint32_t checksum:32; // 0
+  uint32_t filesize:32; // 4
+  uint32_t serial:32; // 8 serial number
+  uint32_t run_type:8; // 12
+  uint32_t fpl_platform:8; // 13
+  uint32_t fpl_lot:16; // 14
+  uint32_t mode_version_or_adhesive_run_num:8; // 16
+  uint32_t waveform_version:8; // 17
+  uint32_t waveform_subversion:8; // 18
+  uint32_t waveform_type:8; // 19
+  uint32_t fpl_size:8; // 20
+  uint32_t mfg_code:8; // 21
+  uint32_t waveform_tuning_bias_or_rev:8; // 22
+  uint32_t fpl_rate:8; // 23
+  uint32_t unknown0:32; // 24
+  uint32_t xwia:24; // address of extra waveform information
+  uint32_t cs1:8; // checksum 1
+  uint32_t wmta:24;
+  uint32_t fvsn:8;
+  uint32_t luts:8;
+  uint32_t mc:8; // mode count (length of mode table - 1)
+  uint32_t trc:8; // temperature range count (length of temperature table - 1)
+  uint32_t reserved0_0:8;
+  uint32_t eb:8;
+  uint32_t sb:8;
+  uint32_t reserved0_1:8;
+  uint32_t reserved0_2:8;
+  uint32_t reserved0_3:8;
+  uint32_t reserved0_4:8;
+  uint32_t reserved0_5:8;
+  uint32_t cs2:8; // checksum 2
 }__attribute__((packed));
 
 
+struct pointer {
+  uint32_t addr:24;
+  uint8_t checksum:8;
+}__attribute__((packed));
+
+struct temp_range {
+  uint8_t from;
+  uint8_t to;
+};
+
 void print_header(struct waveform_data_header* header) {
-  printf("File size (according to header): %d bytes\n", header->filesize);
-  printf("Serial number: %d\n", header->serial);
-  printf("Run type: 0x%x | %s\n", header->run_type, get_desc(run_types, header->run_type, NULL));
-  printf("Manufacturer code: 0x%x | %s\n", header->mfg_code, get_desc_mfg_code(header->mfg_code));
+  printf("Header info:\n");
+  printf("  File size (according to header): %d bytes\n", header->filesize);
+  printf("  Serial number: %d\n", header->serial);
+  printf("  Run type: 0x%x | %s\n", header->run_type, get_desc(run_types, header->run_type, NULL));
+  printf("  Manufacturer code: 0x%x | %s\n", header->mfg_code, get_desc_mfg_code(header->mfg_code));
 
-  printf("Frontplane Laminate (FPL) platform: 0x%x | %s\n", header->fpl_platform, get_desc(fpl_platforms, header->fpl_platform, NULL));
-  printf("Frontplane Laminate (FPL) lot: %d\n", header->fpl_lot);
-  printf("Frontplane Laminate (FPL) size: 0x%x | %s\n", header->fpl_size, get_desc(fpl_sizes, header->fpl_size, NULL));
-  printf("Frontplane Laminate (FPL) rate: 0x%x | %s\n", header->fpl_rate, get_desc(fpl_rates, header->fpl_rate, NULL));
+  printf("  Frontplane Laminate (FPL) platform: 0x%x | %s\n", header->fpl_platform, get_desc(fpl_platforms, header->fpl_platform, NULL));
+  printf("  Frontplane Laminate (FPL) lot: %d\n", header->fpl_lot);
+  printf("  Frontplane Laminate (FPL) size: 0x%x | %s\n", header->fpl_size, get_desc(fpl_sizes, header->fpl_size, NULL));
+  printf("  Frontplane Laminate (FPL) rate: 0x%x | %s\n", header->fpl_rate, get_desc(fpl_rates, header->fpl_rate, NULL));
 
-  printf("Waveform version: %d\n", header->waveform_version);
-  printf("Waveform sub-version: %d\n", header->waveform_subversion);
+  printf("  Waveform version: %d\n", header->waveform_version);
+  printf("  Waveform sub-version: %d\n", header->waveform_subversion);
 
-  printf("Waveform type: 0x%x | %s\n", header->waveform_type, get_desc(waveform_types, header->waveform_type, NULL));
+  printf("  Waveform type: 0x%x | %s\n", header->waveform_type, get_desc(waveform_types, header->waveform_type, NULL));
 
   // if waveform_type is WJ or earlier 
   // then waveform_tuning_bias_or_rev is the tuning bias.
   // if it is WR type or later then it is the revision.
   // if it is in between then we don't know.
   if(header->waveform_type <= 0x15) { // WJ type or earlier
-    printf("Waveform tuning bias: 0x%x | %s\n", header->waveform_tuning_bias_or_rev, get_desc(waveform_tuning_biases, header->waveform_tuning_bias_or_rev, NULL));
-    printf("Waveform revision: Unknown\n");    
+    printf("  Waveform tuning bias: 0x%x | %s\n", header->waveform_tuning_bias_or_rev, get_desc(waveform_tuning_biases, header->waveform_tuning_bias_or_rev, NULL));
+    printf("  Waveform revision: Unknown\n");    
   } else if(header->waveform_type >= 0x2B) { // WR type or later
-    printf("Waveform tuning bias: Unknown\n");
-    printf("Waveform revision: %d\n", header->waveform_tuning_bias_or_rev);
+    printf("  Waveform tuning bias: Unknown\n");
+    printf("  Waveform revision: %d\n", header->waveform_tuning_bias_or_rev);
   } else {
-    printf("Waveform tuning bias: Unknown\n");
-    printf("Waveform revision: Unknown\n");
+    printf("  Waveform tuning bias: Unknown\n");
+    printf("  Waveform revision: Unknown\n");
   }
 
   // if fpl_platform is < 3 then 
   // mode_version_or_adhesive_run_num is the adhesive run number
   if(header->fpl_platform < 3) {
-    printf("Adhesive run number: %d\n", header->mode_version_or_adhesive_run_num);
-    printf("Mode version: Unknown\n");
+    printf("  Adhesive run number: %d\n", header->mode_version_or_adhesive_run_num);
+    printf("  Mode version: Unknown\n");
   } else {
-    printf("Adhesive run number: Unknown\n");
-    printf("Mode version: 0x%x | %s\n", header->mode_version_or_adhesive_run_num, get_desc(mode_versions, header->mode_version_or_adhesive_run_num, NULL));
+    printf("  Adhesive run number: Unknown\n");
+    printf("  Mode version: 0x%x | %s\n", header->mode_version_or_adhesive_run_num, get_desc(mode_versions, header->mode_version_or_adhesive_run_num, NULL));
   }
 
-  printf("Number of modes in this waveform: %d\n", header->mc + 1);
-  printf("Number of temperature ranges in this waveform: %d\n", header->trc + 1);
+  printf("  Number of modes in this waveform: %d\n", header->mc + 1);
+  printf("  Number of temperature ranges in this waveform: %d\n", header->trc + 1);
 
+  printf("\n");
+}
+
+
+int parse_temp_ranges(char* tr_start, uint8_t tr_count, int do_print) {
+  struct pointer* tr;
+  uint8_t checksum;
+  uint8_t i;
+
+  if(!tr_count) {
+    return 0;
+  }
+
+  if(do_print) {
+    printf("    Temperature ranges: \n");
+  }
+
+  for(i=0; i < tr_count; i++) {
+    if(do_print) {
+      printf("      Checking range %2u: ", i);
+    }
+    tr = (struct pointer*) tr_start;
+    checksum = tr_start[0] + tr_start[1] + tr_start[2];
+    if(checksum != tr->checksum) {
+      if(do_print) {
+      printf("    Failed\n");
+      }
+      return -1;
+    }
+    if(do_print) {
+      printf("    Passed\n");
+    }
+    tr_start += 4;
+  }
+
+  return 0;
+}
+
+
+int parse_modes(char* data, char* mode_start, uint8_t mode_count, uint8_t temp_range_count, int do_print) {
+  struct pointer* mode;
+  uint8_t checksum;
+  uint8_t i;
+
+  if(!mode_count) {
+    return 0;
+  }
+
+  if(do_print) {
+    printf("Modes: \n");
+  }
+
+  for(i=0; i < mode_count; i++) {
+    if(do_print) {
+      printf("  Checking mode %2u: ", i);
+    }
+    mode = (struct pointer*) mode_start;
+    checksum = mode_start[0] + mode_start[1] + mode_start[2];
+    if(checksum != mode->checksum) {
+      if(do_print) {
+        printf("Failed\n");
+      }
+      return -1;
+    }
+    if(do_print) {
+      printf("Passed\n");
+    }
+    parse_temp_ranges(data + mode->addr, temp_range_count, do_print);
+    
+    mode_start += 4;
+  }
+
+  return 0;
+}
+
+int check_xwia(char* xwia, int do_print) {
+  uint8_t xwia_len;
+  uint8_t i;
+  uint8_t checksum;
+
+  xwia_len = *(xwia);
+  xwia = xwia + 1;
+  checksum = xwia_len;
+
+  if(do_print) {
+    printf("Extra Waveform Info (xwia): ");
+  }
+  for(i=0; i < xwia_len; i++) {
+    if(do_print) {
+      printf("%c", *(xwia + i));
+    }
+    checksum += *(xwia + i);
+  }
+  if(do_print) {
+    printf("\n\n");
+  }
+
+  if(checksum != (uint8_t) *(xwia + xwia_len)) {
+    return -1;
+  }
+  return 0;
+}
+
+int check_temp_range_table(char* table, uint8_t range_count, int do_print) {
+  uint8_t i;
+  uint8_t checksum;
+  struct temp_range range;
+
+  if(!range_count) {
+    return 0;
+  }
+
+  if(do_print) {
+    printf("Temperature range table:\n");
+  }
+
+  checksum = 0;
+  for(i=0; i < range_count; i++) {
+    range.from = (uint8_t) table[i];
+    range.to = (uint8_t) table[i+1];
+    if(do_print) {
+      printf("  %u - %u °C\n", range.from, range.to);
+    }
+    checksum += range.from;
+  }
+  checksum += range.to;
+ 
+  if(checksum != (uint8_t) table[range_count+1]) {
+    return -1;
+  }
+
+  if(do_print) {
+    printf("\n");
+  }
+
+  return 0;
 }
 
 int check() {
@@ -257,10 +405,19 @@ void usage(FILE* fd) {
 
 int main(int argc, char **argv) {
 
+  char* data;
   char* infile_path;
   FILE* infile;
   size_t len;
-  struct waveform_data_header header;
+  struct waveform_data_header* header; // points to `data` at beginning of header
+  struct stat st;
+  char* modes; // points to `data` where the modes table begins
+  char* temp_range_table; // points to `data` where the temp range table begins
+  uint32_t xwia_len;
+  uint8_t mode_count;
+  uint8_t temp_range_count;
+
+  int do_print = 1;
 
   if(argc != 2) {
     usage(stderr);
@@ -275,15 +432,66 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  len = fread(&header, 1, sizeof(struct waveform_data_header), infile);
+
+  if(stat(infile_path, &st) < 0) {
+    fprintf(stderr, "Error getting file size for: %s\n", strerror(errno));
+    return 1;
+  }
+
+  data = malloc(st.st_size);
+  if(!data) {
+    fprintf(stderr, "Failed to allocate %d bytes of memory: %s\n", (int) st.st_size, strerror(errno));
+    return 1;
+  }
+
+  if(do_print) {
+    printf("\n");
+    printf("File size: %d\n", (int) st.st_size);
+    printf("\n");
+  }
+
+
+  len = fread(data, 1, st.st_size, infile);
   if(len <= 0) {
     fprintf(stderr, "Reading file %s failed: %s\n", infile_path, strerror(errno));
     return 1;
   }
 
-  // TODO handle endianness
+  // start of header
+  header = (struct waveform_data_header*) data;
 
-  print_header(&header);
+  if(do_print) {
+    print_header(header);
+  }
+
+  // start of temperature range table
+  temp_range_table = data + sizeof(struct waveform_data_header);
+
+  if(check_temp_range_table(temp_range_table, header->trc + 1, do_print)) {
+    fprintf(stderr, "Temperature range checksum error\n");
+    return 1;    
+  }
+
+  if(header->xwia) { // if xwia is 0 then there is no xwia info
+    xwia_len = data[header->xwia];
+
+    if(check_xwia(data + header->xwia, do_print) < 0) {
+      fprintf(stderr, "xwia checksum error\n");
+      return 1;
+    }
+  } else {
+    xwia_len = 0;
+  }
+
+  // first byte of xwia contains the length
+  // last byte after xwia is a checksum
+  modes = data + header->xwia + 1 + xwia_len + 1;
+
+  if(parse_modes(data, modes, header->mc + 1, header->trc + 1, do_print) < 0) {
+    fprintf(stderr, "Mode checksum error\n");
+    return 1;    
+  }
+  
 
   return 0;
 }
