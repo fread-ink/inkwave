@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <string.h>
 #include <unistd.h>
+#include <ctype.h>
 #include <sys/stat.h>
 
 // there probably aren't any displays with more waveforms than this (we hope)
@@ -59,14 +60,14 @@ typedef struct {
 Pair update_modes[] = {
   {MODE_INIT, "INIT (panel initialization / clear screen to white)"},
   {MODE_DU, "DU (direct update, grey to black/white transition, 1bpp)"},
-  {MODE_GC16, "GC16 (high fidelity flashing, 4bpp)"},
+  {MODE_GC16, "GC16 (high fidelity, flashing, 4bpp)"},
   {MODE_GC16_FAST, "GC16_FAST (medium fidelity, 4bpp)"},
   {MODE_A2, "A2 (animation update, fastest and lowest fidelity)"},
   {MODE_GL16, "GL16 (high fidelity from white transition, 4bpp)"},
   {MODE_GL16_FAST, "GL16_FAST (medium fidelity from white transition, 4bpp)"},
   {MODE_DU4, "DU4 (direct update, medium fidelity, text to text, 2bpp)"},
-  {MODE_REAGL, "REAGL (non-flashing ghost-compensation)"},
-  {MODE_REAGLD, "REAGLD (non-flashing ghost-compensation with dithering)"},
+  {MODE_REAGL, "REAGL (non-flashing, ghost-compensation)"},
+  {MODE_REAGLD, "REAGLD (non-flashing, ghost-compensation with dithering)"},
   {MODE_GL4, "GL4 (2-bit from white transition, 2bpp)"},
   {MODE_GL16_INV, "GL16_INV (high fidelity for black transition, 4bpp)"},
   {0x00, NULL}
@@ -83,10 +84,15 @@ Pair mfg_codes[] = {
   {0x3A, "ED060SCGH1 (V220 Whitney Hydis – Line 3)"},
   {0x3B, "ED060SCGC1 (V220 Whitney CMO)"},
   {0x3C, "ED060SCGT1 (V220 Whitney CPT)"},
+  {0xA0, "Unknown LGD panel"},
+  {0xA1, "Unknown LGD panel"},
+  {0xA2, "Unknown LGD panel"},
   {0xA3, "LB060S03-RD02 (LGD Tequila Line 1)"},
   {0xA4, "2nd LGD Tequila Line"},
   {0xA5, "LB060S05-RD02 (LGD Whitney Line 1)"},
   {0xA6, "2nd LGD Whitney Line"},
+  {0xA7, "Unknown LGD panel"},
+  {0xA8, "Unknown LGD panel"},
   {0x00, NULL}
 };
 
@@ -161,6 +167,10 @@ Pair waveform_types[] = {
   {0x17, "WL"},
   {0x18, "VJ"},
   {0x2B, "WR"},
+  {0x3C, "AA"},
+  {0x4B, "AC"},
+  {0x4C, "BD"},
+  {0x50, "AE"},
   {0x00, NULL}
 };
 
@@ -225,11 +235,13 @@ struct waveform_data_header {
   uint32_t waveform_version:8; // 17
   uint32_t waveform_subversion:8; // 18
   uint32_t waveform_type:8; // 19
-  uint32_t fpl_size:8; // 20
-  uint32_t mfg_code:8; // 21
+  uint32_t fpl_size:8; // 20 (aka panel_size)
+  uint32_t mfg_code:8; // 21 (aka amepd_part_number)
   uint32_t waveform_tuning_bias_or_rev:8; // 22
-  uint32_t fpl_rate:8; // 23
-  uint32_t unknown0:32; // 24
+  uint32_t fpl_rate:8; // 23 (aka frame_rate)
+  uint32_t unknown0:8;
+  uint32_t vcom_shifted:8;
+  uint32_t unknown1:16;
   uint32_t xwia:24; // address of extra waveform information
   uint32_t cs1:8; // checksum 1
   uint32_t wmta:24;
@@ -237,7 +249,7 @@ struct waveform_data_header {
   uint32_t luts:8;
   uint32_t mc:8; // mode count (length of mode table - 1)
   uint32_t trc:8; // temperature range count (length of temperature table - 1)
-  uint32_t reserved0_0:8;
+  uint32_t advanced_wfm_flags:8;
   uint32_t eb:8;
   uint32_t sb:8;
   uint32_t reserved0_1:8;
@@ -247,7 +259,6 @@ struct waveform_data_header {
   uint32_t reserved0_5:8;
   uint32_t cs2:8; // checksum 2
 }__attribute__((packed));
-
 
 struct pointer {
   uint32_t addr:24;
@@ -351,6 +362,9 @@ void print_header(struct waveform_data_header* header) {
 
   printf("  Number of modes in this waveform: %d\n", header->mc + 1);
   printf("  Number of temperature ranges in this waveform: %d\n", header->trc + 1);
+
+  printf("  4 or 5-bit mode: %u\n", ((header->luts & 0xc) == 4) ? 5 : 4);
+  printf(" OOOOO: %u\n", header->luts);
 
   printf("\n");
 }
@@ -481,21 +495,34 @@ int check_xwia(char* xwia, int do_print) {
   uint8_t xwia_len;
   uint8_t i;
   uint8_t checksum;
+  int non_printables = 0;
 
   xwia_len = *(xwia);
   xwia = xwia + 1;
   checksum = xwia_len;
 
-  if(do_print) {
-    printf("Extra Waveform Info (xwia): ");
-  }
+
   for(i=0; i < xwia_len; i++) {
-    if(do_print) {
-      printf("%c", *(xwia + i));
+    if(!isprint(xwia[i])){
+      non_printables++;
     }
-    checksum += *(xwia + i);
+    checksum += xwia[i];
   }
+
   if(do_print) {
+    
+    printf("Extra Waveform Info (xwia): ");
+
+    if(!xwia_len) {
+      printf("None");
+    } else if(non_printables) {
+      printf("(%u bytes containing %u unprintable characters)", xwia_len, non_printables);
+    } else {
+      for(i=0; i < xwia_len; i++) {
+        printf("%c", xwia[i]);
+      }
+    }
+    
     printf("\n\n");
   }
 
