@@ -11,30 +11,66 @@
 #define MAX_WAVEFORMS (4096)
 
 /*
+# unsolved mysteries
+
+## .wbf format
+
+Each waveform segment ends with two bytes that do not appear to be part of the waveform itself. The first is always `0xff` and the second is unpredictable. Unfortunately `0xff` can occur inside of waveforms as well so it is not useful as an endpoint marker. The last byte might be a sort of checksum but does not appear to be a simple 1-byte sum like other 1-byte checksums used in .wbf files.
 
 # format info
 
-The following is format info gleaned from open source header files that hasn't yet been incorporated into this program.
+The following is format info gleaned from open source header files or similar that hasn't yet been incorporated into this program.
 
-## update modes
+Some info gleaned from this marketing PDF on the Freescale website: http://www.freescale.com.cn/cstory/ftf/2010/pdf/0989.pdf
 
-* 0x00: INIT (panel initialization)
-* 0x01: MU/DU (direct update, 1bpp)
-* 0x02: GU/GC4/GC16 (greyscale update / grayscale clear 2bpp / or 4bpp)
-* 0x03: GC16_FAST / A2 (grayscale clear 4bpp / ?)
-* 0x04: AU (animation update, 1bpp)
-* 0x05: GL (white transition, grayscale clear, 4bpp)
-* 0x06: GL_FAST/GLF (text to text, grayscale clear, 4bpp)
-* 0x07: DU4 (text to text)
-* 0x08: REAGL (non-flashing update)
-* 0x09: REAGLD (non-flashing update with dithering)
+## acronyms and terms
+
+* Global Update: Update entire screen
+* Full Update: Sending waveform to all pixels in a region
+* Partial Update: Only send waveform to pixels within region that need changing
+* Concurrent update: 
+* DU: Direct Update
+* AU: Animation Update
+* GU: Global Update or Greyscale Update
 
 */
+
+#define MODE_INIT      (0x0)
+#define MODE_DU        (0x1)
+#define MODE_GC16      (0x2)
+#define MODE_GC4       WAVEFORM_MODE_GC16
+#define MODE_GC16_FAST (0x3)
+#define MODE_A2        (0x4)
+#define MODE_GL16      (0x5)
+#define MODE_GL16_FAST (0x6)
+#define MODE_DU4       (0x7)
+#define MODE_REAGL     (0x8)
+#define MODE_REAGLD    (0x9)
+#define MODE_GL4       (0xA)
+#define MODE_GL16_INV  (0xB)
+
 
 typedef struct {
   uint32_t key;
   const char* val;
 } Pair;
+
+
+Pair update_modes[] = {
+  {MODE_INIT, "INIT (panel initialization / clear screen to white)"},
+  {MODE_DU, "DU (direct update, grey to black/white transition, 1bpp)"},
+  {MODE_GC16, "GC16 (high fidelity flashing, 4bpp)"},
+  {MODE_GC16_FAST, "GC16_FAST (medium fidelity, 4bpp)"},
+  {MODE_A2, "A2 (animation update, fastest and lowest fidelity)"},
+  {MODE_GL16, "GL16 (high fidelity from white transition, 4bpp)"},
+  {MODE_GL16_FAST, "GL16_FAST (medium fidelity from white transition, 4bpp)"},
+  {MODE_DU4, "DU4 (direct update, medium fidelity, text to text, 2bpp)"},
+  {MODE_REAGL, "REAGL (non-flashing ghost-compensation)"},
+  {MODE_REAGLD, "REAGLD (non-flashing ghost-compensation with dithering)"},
+  {MODE_GL4, "GL4 (2-bit from white transition, 2bpp)"},
+  {MODE_GL16_INV, "GL16_INV (high fidelity for black transition, 4bpp)"},
+  {0x00, NULL}
+};
 
 Pair mfg_codes[] = {
   {0x33, "ED060SCF (V220 6\" Tequila)"},
@@ -151,6 +187,17 @@ const char* get_desc(Pair table[], unsigned int key, const char* def) {
   }
 }
 
+void print_modes(uint8_t mode_count) {
+  uint8_t i;
+  const char* desc;
+
+  printf("Modes in file:\n");
+  for(i=0; i < mode_count; i++) {
+    desc = get_desc(update_modes, i, "Unknown mode");
+    printf("  %2u: %s\n", i, desc);
+  }
+  printf("\n");
+}
 
 const char* get_desc_mfg_code(unsigned int mfg_code) {
   const char* desc = get_desc(mfg_codes, mfg_code, NULL);
@@ -211,6 +258,13 @@ struct temp_range {
   uint8_t from;
   uint8_t to;
 };
+
+struct packed_state {
+  uint8_t s0:2;
+  uint8_t s1:2;
+  uint8_t s2:2;
+  uint8_t s3:2;
+}__attribute__((packed));
 
 int bubble_sort(uint32_t* wav_addrs) {
   uint32_t i;
@@ -302,7 +356,43 @@ void print_header(struct waveform_data_header* header) {
 }
 
 
-int parse_temp_ranges(char* tr_start, uint8_t tr_count, uint32_t* wav_addrs, int do_print) {
+uint32_t get_waveform_length(uint32_t* wav_addrs, uint32_t wav_addr) {
+  uint32_t i;
+
+  for(i=0; i < MAX_WAVEFORMS - 1; i++) {
+    if(wav_addrs[i] == wav_addr) {
+      if(!wav_addrs[i]) return 0;
+
+      return wav_addrs[i+1] - wav_addr;
+    }
+  }
+  return 0;
+}
+
+int parse_waveform(char* data, uint32_t* wav_addrs, uint32_t wav_addr) {
+  uint32_t i;
+  struct packed_state* s;
+  uint8_t count;
+  char* waveform = data + wav_addr;
+  uint32_t len = get_waveform_length(wav_addrs, wav_addr);
+  if(!len) {
+    fprintf(stderr, "Could not find waveform length\n");
+    return -1;
+  }
+  
+  for(i=0; i < len - 1; i += 2) {
+    if(waveform[i] == 0xfc) continue;
+    s = (struct packed_state*) waveform + i;
+    count = (uint8_t) waveform[i + 1] + 1;
+    //    printf("BITS: %02u %02u %02u %02u | %u\n", s->s0, s->s1, s->s2, s->s3, count);
+  }
+
+  //  printf("From: %u len %u\n", wav_addr, len);
+
+  return 0;
+}
+
+int parse_temp_ranges(char* data, char* tr_start, uint8_t tr_count, uint32_t* wav_addrs, int first_pass, int do_print) {
   struct pointer* tr;
   uint8_t checksum;
   uint8_t i;
@@ -330,17 +420,26 @@ int parse_temp_ranges(char* tr_start, uint8_t tr_count, uint32_t* wav_addrs, int
     if(do_print) {
       printf("Passed\n");
     }
-    if(add_wav_addr(wav_addrs, tr->addr) < 0) {
-      return -1;
+    if(first_pass) {
+      if(add_wav_addr(wav_addrs, tr->addr) < 0) {
+        return -1;
+      }
+    } else {
+      if(parse_waveform(data, wav_addrs, tr->addr) < 0) {
+        return -1;
+      }
     }
+
     tr_start += 4;
   }
-  printf("\n");
+  if(do_print) {
+    printf("\n");
+  }
   return 0;
 }
 
 
-int parse_modes(char* data, char* mode_start, uint8_t mode_count, uint8_t temp_range_count, uint32_t* wav_addrs, int do_print) {
+int parse_modes(char* data, char* mode_start, uint8_t mode_count, uint8_t temp_range_count, uint32_t* wav_addrs, int first_pass, int do_print) {
   struct pointer* mode;
   uint8_t checksum;
   uint8_t i;
@@ -368,7 +467,9 @@ int parse_modes(char* data, char* mode_start, uint8_t mode_count, uint8_t temp_r
     if(do_print) {
       printf("Passed\n");
     }
-    parse_temp_ranges(data + mode->addr, temp_range_count, wav_addrs, do_print);
+    if(parse_temp_ranges(data, data + mode->addr, temp_range_count, wav_addrs, first_pass, do_print) < 0) {
+      return -1;
+    }
     
     mode_start += 4;
   }
@@ -571,6 +672,12 @@ int main(int argc, char **argv) {
 
   if(do_print) {
     print_header(header);
+    
+    if(header->fpl_platform < 3) {
+      printf("Modes: Unknown (no mode version specified)\n");
+    } else {
+      print_modes(header->mc + 1);
+    }
   }
 
   // start of temperature range table
@@ -596,8 +703,8 @@ int main(int argc, char **argv) {
   // last byte after xwia is a checksum
   modes = data + header->xwia + 1 + xwia_len + 1;
 
-  if(parse_modes(data, modes, header->mc + 1, header->trc + 1, wav_addrs, do_print) < 0) {
-    fprintf(stderr, "Mode checksum error\n");
+  if(parse_modes(data, modes, header->mc + 1, header->trc + 1, wav_addrs, 1, 0) < 0) {
+    fprintf(stderr, "Parse error during first pass\n");
     goto fail; 
   }
 
@@ -611,6 +718,13 @@ int main(int argc, char **argv) {
   if(add_wav_addr(wav_addrs, st.st_size) < 0) {
     fprintf(stderr, "Failed to add file end address to waveform table.\n");
     goto fail;
+  }
+
+
+  // parse modes again since we now have all the sorted waveform addresses
+  if(parse_modes(data, modes, header->mc + 1, header->trc + 1, wav_addrs, 0, do_print) < 0) {
+    fprintf(stderr, "Parse error during second pass\n");
+    goto fail; 
   }
 
   // TODO actually write output file
