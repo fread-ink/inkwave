@@ -657,8 +657,10 @@ int parse_modes(struct waveform_data_header* header, char* data, char* mode_star
 
 
   if(outfile) {
-    // TODO why the extra +1 ?
-    mode_table_addr = sizeof(struct waveform_data_header) + 1 + header->trc + 1;
+    // the + 2 is because there is one more temperature range than the
+    // count in header->trc and then because these are ranges there is one
+    // more temperature than the number of ranges
+    mode_table_addr = sizeof(struct waveform_data_header) + header->trc + 2;
 
     if(write_table(mode_table_addr, mode_addrs, outfile, MAX_MODES) < 0) {
       fprintf(stderr, "Error writing mode table\n");
