@@ -16,12 +16,16 @@
 #define MAX_MODES (256)
 #define MAX_TEMP_RANGES (256)
 
+// for unknown reasons addresses in the .wrf file 
+// need to be offset by 63 bytes
+#define MYSTERIOUS_OFFSET (63)
+
 /*
 # unsolved mysteries
 
-## 64 byte offsets
+## .wrf format
 
-The mode pointers in the .wrf file seem 
+All mode pointers in the .wrf file need to be offset by 63 bytes. Likely has something to do with how they are passed by the epdc kernel module to the epdc.
 
 ## .wbf format
 
@@ -544,6 +548,7 @@ int parse_temp_ranges(struct waveform_data_header* header, char* data, char* tr_
           return -1;
         }
 
+        phase_count = htons(phase_count);
         // write phase count
         written = fwrite(&phase_count, sizeof(phase_count), 1, outfile);
         if(written != 1) {
@@ -599,12 +604,12 @@ int parse_modes(struct waveform_data_header* header, char* data, char* mode_star
     if(mode_addrs && outfile) {
 
       // TODO we don't know why these positions are offset by 63
-      pos = ftell(outfile) - 63;
+      pos = ftell(outfile) - MYSTERIOUS_OFFSET;
       if(pos < 0) {
         fprintf(stderr, "Error getting position in file: %s\n", strerror(errno));
         return -1;
       }
-      pos = htons(pos);
+
       if(add_addr(mode_addrs, pos, MAX_MODES) < 0) {
         return -1;
       }
@@ -721,7 +726,7 @@ int write_mode_table(uint32_t mode_table_addr, uint32_t* mode_addrs, FILE* outfi
   for(i=0; i < MAX_MODES; i++) {
     if(!mode_addrs[i]) break;
 
-    addr = htons(mode_addrs[i]);
+    addr = mode_addrs[i];
 
     written = fwrite(&addr, 1, sizeof(uint32_t), outfile);
     if(written != sizeof(uint32_t)) {
