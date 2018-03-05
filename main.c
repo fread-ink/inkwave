@@ -12,6 +12,10 @@
 // (technically the header allows for 256 * 256 waveforms but that's not realistic)
 #define MAX_WAVEFORMS (4096)
 
+// these are the actual maximums
+#define MAX_MODES (256)
+#define MAX_TEMP_RANGES (256)
+
 /*
 # unsolved mysteries
 
@@ -316,19 +320,19 @@ int bubble_sort(uint32_t* wav_addrs) {
   return i; // return length
 }
 
-int add_wav_addr(uint32_t* wav_addrs, uint32_t addr) {
+int add_addr(uint32_t* addrs, uint32_t addr, uint32_t max) {
   uint32_t i;
 
-  for(i=0; i < MAX_WAVEFORMS; i++) {
-    if(wav_addrs[i] == addr) {
+  for(i=0; i < max; i++) {
+    if(addrs[i] == addr) {
       return 0; // this address was already in the array
     }
-    if(!wav_addrs[i]) {
-      wav_addrs[i] = addr;
+    if(!addrs[i]) {
+      addrs[i] = addr;
       return 1; // added
     }
   }
-  fprintf(stderr, "Encountered more waveforms than our hardcoded max of %u\n", MAX_WAVEFORMS);
+  fprintf(stderr, "Encountered more addresses than our hardcoded max\n");
   return -1;
 }
 
@@ -396,7 +400,7 @@ uint32_t get_waveform_length(uint32_t* wav_addrs, uint32_t wav_addr) {
   return 0;
 }
 
-uint16_t parse_waveform(char* data, uint32_t* wav_addrs, uint32_t wav_addr, FILE* outfile, uint16_t phase_count) {
+uint16_t parse_waveform(char* data, uint32_t* wav_addrs, uint32_t wav_addr, FILE* outfile) {
   uint32_t i, j;
   struct packed_state* s;
   struct unpacked_state u;
@@ -404,25 +408,8 @@ uint16_t parse_waveform(char* data, uint32_t* wav_addrs, uint32_t wav_addr, FILE
   int fc_active;
   int zero_pad;
   size_t written;
+  uint16_t phase_count = 0;
   char* waveform = data + wav_addr;
-  int do_count = 1;
-
-  phase_count = htons(phase_count);
-  if(phase_count) {
-    do_count = 0;
-    
-    if(outfile) {
-      written = fwrite(&phase_count, sizeof(phase_count), 1, outfile);
-      if(written != 1) {
-        fprintf(stderr, "Error writing phase count to output file: %s\n", strerror(errno));
-        return -1;
-      }
-      if(fseek(outfile, 8 - sizeof(phase_count), SEEK_CUR) < 0) {
-        fprintf(stderr, "Error writing phase count to output file: %s\n", strerror(errno));
-        return -1;
-      }
-    }
-  }
 
   // TODO
   // We are cutting off the last two bytes
@@ -461,11 +448,10 @@ uint16_t parse_waveform(char* data, uint32_t* wav_addrs, uint32_t wav_addr, FILE
       zero_pad = 0;
       i += 2;
     }
-    if(do_count) {
-      phase_count += count * 4;
-    }
 
-    if(outfile && !do_count) {
+    phase_count += count * 4;
+
+    if(outfile) {
 
       u.s0 = s->s0;
       u.s1 = s->s1;
@@ -482,15 +468,18 @@ uint16_t parse_waveform(char* data, uint32_t* wav_addrs, uint32_t wav_addr, FILE
       }
     }
   }
-  
+
   return phase_count;
 }
 
-int parse_temp_ranges(struct waveform_data_header* header, char* data, char* tr_start, uint8_t tr_count, uint32_t* wav_addrs, int first_pass, FILE* outfile, int do_print) {
+int parse_temp_ranges(struct waveform_data_header* header, char* data, char* tr_start, uint8_t tr_count, uint32_t* wav_addrs, uint32_t* mode_addrs, int first_pass, FILE* outfile, int do_print) {
   struct pointer* tr;
   uint8_t checksum;
   uint8_t i;
   uint16_t phase_count;
+  size_t written;
+  long fprev;
+  long fcur;
 
   if(!tr_count) {
     return 0;
@@ -520,20 +509,53 @@ int parse_temp_ranges(struct waveform_data_header* header, char* data, char* tr_
       return -1;
     }
     if(do_print) {
-      printf("Passed\n");
+      printf("Passed\n"); // TODO print number of phases
     }
     if(first_pass) {
-      if(add_wav_addr(wav_addrs, tr->addr) < 0) {
+      if(add_addr(wav_addrs, tr->addr, MAX_WAVEFORMS) < 0) {
         return -1;
       }
     } else {
-      phase_count = parse_waveform(data, wav_addrs, tr->addr, NULL, 0);
+
+      if(outfile) {
+        fprev = ftell(outfile); // save position to use for writing phase count
+        if(fprev < 0) {
+          fprintf(stderr, "Error getting position in file: %s\n", strerror(errno));
+          return -1;
+        }
+        if(fseek(outfile, 8, SEEK_CUR) < 0) {
+          fprintf(stderr, "Error seeking in output file: %s\n", strerror(errno));
+          return -1;
+        }
+      }
+      phase_count = parse_waveform(data, wav_addrs, tr->addr, outfile);
       if(phase_count < 0) {
         return -1;
       }
 
-      if(parse_waveform(data, wav_addrs, tr->addr, outfile, phase_count) < 0) {
-        return -1;
+      if(outfile) {
+        fcur = ftell(outfile); // save current position in file
+        if(fcur < 0) {
+          fprintf(stderr, "Error getting position in file: %s\n", strerror(errno));
+          return -1;
+        }
+        if(fseek(outfile, fprev, SEEK_SET) < 0) {
+          fprintf(stderr, "Error seeking in output file: %s\n", strerror(errno));
+          return -1;
+        }
+
+        // write phase count
+        written = fwrite(&phase_count, sizeof(phase_count), 1, outfile);
+        if(written != 1) {
+          fprintf(stderr, "Error writing phase count to output file: %s\n", strerror(errno));
+          return -1;
+        }
+
+        // restore file position to end of previously written data
+        if(fseek(outfile, fcur, SEEK_SET) < 0) {
+          fprintf(stderr, "Error writing phase count to output file: %s\n", strerror(errno));
+          return -1;
+        }
       }
     }
 
@@ -547,10 +569,11 @@ int parse_temp_ranges(struct waveform_data_header* header, char* data, char* tr_
 }
 
 
-int parse_modes(struct waveform_data_header* header, char* data, char* mode_start, uint8_t mode_count, uint8_t temp_range_count, uint32_t* wav_addrs, int first_pass, FILE* outfile, int do_print) {
+int parse_modes(struct waveform_data_header* header, char* data, char* mode_start, uint8_t mode_count, uint8_t temp_range_count, uint32_t* wav_addrs, uint32_t* mode_addrs, int first_pass, FILE* outfile, int do_print) {
   struct pointer* mode;
   uint8_t checksum;
   uint8_t i;
+  long pos;
 
   if(!mode_count) {
     return 0;
@@ -572,10 +595,25 @@ int parse_modes(struct waveform_data_header* header, char* data, char* mode_star
       }
       return -1;
     }
+
+    if(mode_addrs && outfile) {
+
+      // TODO we don't know why these positions are offset by 63
+      pos = ftell(outfile) - 63;
+      if(pos < 0) {
+        fprintf(stderr, "Error getting position in file: %s\n", strerror(errno));
+        return -1;
+      }
+      pos = htons(pos);
+      if(add_addr(mode_addrs, pos, MAX_MODES) < 0) {
+        return -1;
+      }
+    }
+
     if(do_print) {
       printf("Passed\n");
     }
-    if(parse_temp_ranges(header, data, data + mode->addr, temp_range_count, wav_addrs, first_pass, outfile, do_print) < 0) {
+    if(parse_temp_ranges(header, data, data + mode->addr, temp_range_count, wav_addrs, mode_addrs, first_pass, outfile, do_print) < 0) {
       return -1;
     }
     
@@ -670,6 +708,36 @@ int parse_temp_range_table(char* table, uint8_t range_count, FILE* outfile, int 
   return 0;
 }
 
+int write_mode_table(uint32_t mode_table_addr, uint32_t* mode_addrs, FILE* outfile) {
+  int i;
+  size_t written;
+  uint32_t addr;
+
+  if(fseek(outfile, mode_table_addr, SEEK_SET) < 0) {
+    fprintf(stderr, "Error seeking in output file: %s\n", strerror(errno));
+    return -1;
+  }
+
+  for(i=0; i < MAX_MODES; i++) {
+    if(!mode_addrs[i]) break;
+
+    addr = htons(mode_addrs[i]);
+
+    written = fwrite(&addr, 1, sizeof(uint32_t), outfile);
+    if(written != sizeof(uint32_t)) {
+      fprintf(stderr, "Error writing mode address table to output file: %s\n", strerror(errno));
+      return -1;
+    }
+
+    if(fseek(outfile, 4, SEEK_CUR) < 0) {
+      fprintf(stderr, "Error seeking in output file: %s\n", strerror(errno));
+      return -1;
+    }
+  }
+
+  return 0;
+}
+
 int write_header(FILE* outfile, struct waveform_data_header* header) {
   size_t written;
 
@@ -728,9 +796,12 @@ int main(int argc, char **argv) {
   int force = 0;
   int c;
   uint32_t unique_waveform_count;
-  uint32_t wav_addrs[MAX_WAVEFORMS]; // waveform addresses
+  uint32_t wav_addrs[MAX_WAVEFORMS]; // waveform addresses in input file
+  uint32_t mode_addrs[256]; // mode addresses for output file
+  uint32_t mode_table_addr; // mode table output start address
 
   memset(wav_addrs, 0, sizeof(wav_addrs));
+  memset(mode_addrs, 0, sizeof(mode_addrs));
 
   while((c = getopt(argc, argv, "o:f:h")) != -1) {
     switch (c) {
@@ -862,7 +933,7 @@ int main(int argc, char **argv) {
   // last byte after xwia is a checksum
   modes = data + header->xwia + 1 + xwia_len + 1;
 
-  if(parse_modes(header, data, modes, header->mc + 1, header->trc + 1, wav_addrs, 1, NULL, 0) < 0) {
+  if(parse_modes(header, data, modes, header->mc + 1, header->trc + 1, wav_addrs, NULL, 1, NULL, 0) < 0) {
     fprintf(stderr, "Parse error during first pass\n");
     goto fail; 
   }
@@ -874,19 +945,27 @@ int main(int argc, char **argv) {
   
   // add file endpoint to waveform address table
   // since we use this to determine end address of each waveform
-  if(add_wav_addr(wav_addrs, st.st_size) < 0) {
+  if(add_addr(wav_addrs, st.st_size, MAX_WAVEFORMS) < 0) {
     fprintf(stderr, "Failed to add file end address to waveform table.\n");
     goto fail;
   }
 
 
   // parse modes again since we now have all the sorted waveform addresses
-  if(parse_modes(header, data, modes, header->mc + 1, header->trc + 1, wav_addrs, 0, outfile, do_print) < 0) {
+  if(parse_modes(header, data, modes, header->mc + 1, header->trc + 1, wav_addrs, mode_addrs, 0, outfile, do_print) < 0) {
     fprintf(stderr, "Parse error during second pass\n");
     goto fail; 
   }
 
-  // TODO actually write output file
+  if(outfile) {
+    // TODO why the extra +1 ?
+    mode_table_addr = sizeof(struct waveform_data_header) + 1 + header->trc + 1;
+
+    if(write_mode_table(mode_table_addr, mode_addrs, outfile) < 0) {
+      fprintf(stderr, "Error writing mode table\n");
+      return -1;
+    }
+  }
 
   return 0;
 
