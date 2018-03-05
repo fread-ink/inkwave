@@ -412,7 +412,7 @@ uint16_t parse_waveform(char* data, uint32_t* wav_addrs, uint32_t wav_addr, FILE
   int fc_active;
   int zero_pad;
   size_t written;
-  uint16_t phase_count = 0;
+  uint16_t state_count = 0;
   char* waveform = data + wav_addr;
 
   // TODO
@@ -453,7 +453,7 @@ uint16_t parse_waveform(char* data, uint32_t* wav_addrs, uint32_t wav_addr, FILE
       i += 2;
     }
 
-    phase_count += count * 4;
+    state_count += count * 4;
 
     if(outfile) {
 
@@ -473,14 +473,14 @@ uint16_t parse_waveform(char* data, uint32_t* wav_addrs, uint32_t wav_addr, FILE
     }
   }
 
-  return phase_count;
+  return state_count;
 }
 
 int parse_temp_ranges(struct waveform_data_header* header, char* data, char* tr_start, uint8_t tr_count, uint32_t* wav_addrs, int first_pass, FILE* outfile, int do_print) {
   struct pointer* tr;
   uint8_t checksum;
   uint8_t i;
-  uint16_t phase_count;
+  uint16_t state_count;
   size_t written;
   long ftable;
   long fprev;
@@ -523,9 +523,7 @@ int parse_temp_ranges(struct waveform_data_header* header, char* data, char* tr_
       }
       return -1;
     }
-    if(do_print) {
-      printf("Passed\n"); // TODO print number of phases
-    }
+
     if(first_pass) {
       if(add_addr(wav_addrs, tr->addr, MAX_WAVEFORMS) < 0) {
         return -1;
@@ -549,9 +547,13 @@ int parse_temp_ranges(struct waveform_data_header* header, char* data, char* tr_
           return -1;
         }
       }
-      phase_count = parse_waveform(data, wav_addrs, tr->addr, outfile);
-      if(phase_count < 0) {
+      state_count = parse_waveform(data, wav_addrs, tr->addr, outfile);
+      if(state_count < 0) {
         return -1;
+      }
+
+      if(do_print) {
+        printf("%4u phases\n", state_count / 256);
       }
 
       if(outfile) {
@@ -565,17 +567,17 @@ int parse_temp_ranges(struct waveform_data_header* header, char* data, char* tr_
           return -1;
         }
 
-        phase_count = htons(phase_count);
-        // write phase count
-        written = fwrite(&phase_count, sizeof(phase_count), 1, outfile);
+        state_count = htons(state_count);
+        // write state count
+        written = fwrite(&state_count, sizeof(state_count), 1, outfile);
         if(written != 1) {
-          fprintf(stderr, "Error writing phase count to output file: %s\n", strerror(errno));
+          fprintf(stderr, "Error writing state count to output file: %s\n", strerror(errno));
           return -1;
         }
 
         // restore file position to end of previously written data
         if(fseek(outfile, fcur, SEEK_SET) < 0) {
-          fprintf(stderr, "Error writing phase count to output file: %s\n", strerror(errno));
+          fprintf(stderr, "Error seeking in output file: %s\n", strerror(errno));
           return -1;
         }
       }
@@ -1001,7 +1003,6 @@ int main(int argc, char **argv) {
     fprintf(stderr, "Failed to add file end address to waveform table.\n");
     goto fail;
   }
-
 
   // parse modes again since we now have all the sorted waveform addresses
   if(parse_modes(header, data, modes, header->mc + 1, header->trc + 1, wav_addrs, 0, outfile, do_print) < 0) {
