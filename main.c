@@ -476,24 +476,35 @@ uint16_t parse_waveform(char* data, uint32_t* wav_addrs, uint32_t wav_addr, FILE
   return phase_count;
 }
 
-int parse_temp_ranges(struct waveform_data_header* header, char* data, char* tr_start, uint8_t tr_count, uint32_t* wav_addrs, uint32_t* mode_addrs, int first_pass, FILE* outfile, int do_print) {
+int parse_temp_ranges(struct waveform_data_header* header, char* data, char* tr_start, uint8_t tr_count, uint32_t* wav_addrs, int first_pass, FILE* outfile, int do_print) {
   struct pointer* tr;
   uint8_t checksum;
   uint8_t i;
   uint16_t phase_count;
   size_t written;
+  long ftable;
   long fprev;
   long fcur;
+  uint32_t tr_addrs[256]; // temperature range addresses for output file
+  uint32_t tr_table_addr; // temperature range table output start address
 
   if(!tr_count) {
     return 0;
   }
 
+  memset(tr_addrs, 0, sizeof(tr_addrs));
+
   if(do_print) {
     printf("    Temperature ranges: \n");
   }
 
+
   if(outfile) {
+    ftable = ftell(outfile);
+    if(ftable < 0) {
+      fprintf(stderr, "Error getting position in file: %s\n", strerror(errno));
+      return -1;
+    }
     if(fseek(outfile, (header->trc + 1) * 8, SEEK_CUR) < 0) {
       fprintf(stderr, "Error seeking in output file: %s\n", strerror(errno));
       return -1;      
@@ -522,11 +533,17 @@ int parse_temp_ranges(struct waveform_data_header* header, char* data, char* tr_
     } else {
 
       if(outfile) {
+
         fprev = ftell(outfile); // save position to use for writing phase count
         if(fprev < 0) {
           fprintf(stderr, "Error getting position in file: %s\n", strerror(errno));
           return -1;
         }
+
+        if(add_addr(tr_addrs, fprev - MYSTERIOUS_OFFSET, MAX_TEMP_RANGES) < 0) {
+          return -1;
+        }
+
         if(fseek(outfile, 8, SEEK_CUR) < 0) {
           fprintf(stderr, "Error seeking in output file: %s\n", strerror(errno));
           return -1;
@@ -570,19 +587,31 @@ int parse_temp_ranges(struct waveform_data_header* header, char* data, char* tr_
     printf("\n");
   }
 
+  if(outfile) {
+    if(write_table(ftable, tr_addrs, outfile, MAX_TEMP_RANGES) < 0) {
+      fprintf(stderr, "Error writing temperature range table\n");
+      return -1;
+    }
+
+  }
+
   return 0;
 }
 
 
-int parse_modes(struct waveform_data_header* header, char* data, char* mode_start, uint8_t mode_count, uint8_t temp_range_count, uint32_t* wav_addrs, uint32_t* mode_addrs, int first_pass, FILE* outfile, int do_print) {
+int parse_modes(struct waveform_data_header* header, char* data, char* mode_start, uint8_t mode_count, uint8_t temp_range_count, uint32_t* wav_addrs, int first_pass, FILE* outfile, int do_print) {
   struct pointer* mode;
   uint8_t checksum;
   uint8_t i;
   long pos;
+  uint32_t mode_addrs[256]; // mode addresses for output file
+  uint32_t mode_table_addr; // mode table output start address
 
   if(!mode_count) {
     return 0;
   }
+
+  memset(mode_addrs, 0, sizeof(mode_addrs));
 
   if(do_print) {
     printf("Modes: \n");
@@ -601,9 +630,8 @@ int parse_modes(struct waveform_data_header* header, char* data, char* mode_star
       return -1;
     }
 
-    if(mode_addrs && outfile) {
+    if(outfile) {
 
-      // TODO we don't know why these positions are offset by 63
       pos = ftell(outfile) - MYSTERIOUS_OFFSET;
       if(pos < 0) {
         fprintf(stderr, "Error getting position in file: %s\n", strerror(errno));
@@ -618,11 +646,22 @@ int parse_modes(struct waveform_data_header* header, char* data, char* mode_star
     if(do_print) {
       printf("Passed\n");
     }
-    if(parse_temp_ranges(header, data, data + mode->addr, temp_range_count, wav_addrs, mode_addrs, first_pass, outfile, do_print) < 0) {
+    if(parse_temp_ranges(header, data, data + mode->addr, temp_range_count, wav_addrs, first_pass, outfile, do_print) < 0) {
       return -1;
     }
     
     mode_start += 4;
+  }
+
+
+  if(outfile) {
+    // TODO why the extra +1 ?
+    mode_table_addr = sizeof(struct waveform_data_header) + 1 + header->trc + 1;
+
+    if(write_table(mode_table_addr, mode_addrs, outfile, MAX_MODES) < 0) {
+      fprintf(stderr, "Error writing mode table\n");
+      return -1;
+    }
   }
 
   return 0;
@@ -713,24 +752,30 @@ int parse_temp_range_table(char* table, uint8_t range_count, FILE* outfile, int 
   return 0;
 }
 
-int write_mode_table(uint32_t mode_table_addr, uint32_t* mode_addrs, FILE* outfile) {
+int write_table(uint32_t table_addr, uint32_t* addrs, FILE* outfile, uint32_t max) {
   int i;
   size_t written;
   uint32_t addr;
+  long prev;
 
-  if(fseek(outfile, mode_table_addr, SEEK_SET) < 0) {
+  prev = ftell(outfile);
+  if(prev < 0) {
+    return -1;
+  }
+
+  if(fseek(outfile, table_addr, SEEK_SET) < 0) {
     fprintf(stderr, "Error seeking in output file: %s\n", strerror(errno));
     return -1;
   }
 
-  for(i=0; i < MAX_MODES; i++) {
-    if(!mode_addrs[i]) break;
+  for(i=0; i < max; i++) {
+    if(!addrs[i]) break;
 
-    addr = mode_addrs[i];
+    addr = addrs[i];
 
     written = fwrite(&addr, 1, sizeof(uint32_t), outfile);
     if(written != sizeof(uint32_t)) {
-      fprintf(stderr, "Error writing mode address table to output file: %s\n", strerror(errno));
+      fprintf(stderr, "Error writing address table to output file: %s\n", strerror(errno));
       return -1;
     }
 
@@ -739,6 +784,11 @@ int write_mode_table(uint32_t mode_table_addr, uint32_t* mode_addrs, FILE* outfi
       return -1;
     }
   }
+
+  if(fseek(outfile, prev, SEEK_SET) < 0) {
+    fprintf(stderr, "Error seeking in output file: %s\n", strerror(errno));
+    return -1;
+  }  
 
   return 0;
 }
@@ -802,11 +852,8 @@ int main(int argc, char **argv) {
   int c;
   uint32_t unique_waveform_count;
   uint32_t wav_addrs[MAX_WAVEFORMS]; // waveform addresses in input file
-  uint32_t mode_addrs[256]; // mode addresses for output file
-  uint32_t mode_table_addr; // mode table output start address
 
   memset(wav_addrs, 0, sizeof(wav_addrs));
-  memset(mode_addrs, 0, sizeof(mode_addrs));
 
   while((c = getopt(argc, argv, "o:f:h")) != -1) {
     switch (c) {
@@ -938,7 +985,7 @@ int main(int argc, char **argv) {
   // last byte after xwia is a checksum
   modes = data + header->xwia + 1 + xwia_len + 1;
 
-  if(parse_modes(header, data, modes, header->mc + 1, header->trc + 1, wav_addrs, NULL, 1, NULL, 0) < 0) {
+  if(parse_modes(header, data, modes, header->mc + 1, header->trc + 1, wav_addrs, 1, NULL, 0) < 0) {
     fprintf(stderr, "Parse error during first pass\n");
     goto fail; 
   }
@@ -957,19 +1004,9 @@ int main(int argc, char **argv) {
 
 
   // parse modes again since we now have all the sorted waveform addresses
-  if(parse_modes(header, data, modes, header->mc + 1, header->trc + 1, wav_addrs, mode_addrs, 0, outfile, do_print) < 0) {
+  if(parse_modes(header, data, modes, header->mc + 1, header->trc + 1, wav_addrs, 0, outfile, do_print) < 0) {
     fprintf(stderr, "Parse error during second pass\n");
     goto fail; 
-  }
-
-  if(outfile) {
-    // TODO why the extra +1 ?
-    mode_table_addr = sizeof(struct waveform_data_header) + 1 + header->trc + 1;
-
-    if(write_mode_table(mode_table_addr, mode_addrs, outfile) < 0) {
-      fprintf(stderr, "Error writing mode table\n");
-      return -1;
-    }
   }
 
   return 0;
