@@ -45,7 +45,7 @@ Some info gleaned from this marketing PDF on the Freescale website: http://www.f
 * Concurrent update: 
 * DU: Direct Update
 * AU: Animation Update
-* GU: Global Update or Greyscale Update
+* GU: Global Update or Grayscale Update
 
 */
 
@@ -72,7 +72,7 @@ typedef struct {
 
 Pair update_modes[] = {
   {MODE_INIT, "INIT (panel initialization / clear screen to white)"},
-  {MODE_DU, "DU (direct update, grey to black/white transition, 1bpp)"},
+  {MODE_DU, "DU (direct update, gray to black/white transition, 1bpp)"},
   {MODE_GC16, "GC16 (high fidelity, flashing, 4bpp)"},
   {MODE_GC16_FAST, "GC16_FAST (medium fidelity, 4bpp)"},
   {MODE_A2, "A2 (animation update, fastest and lowest fidelity)"},
