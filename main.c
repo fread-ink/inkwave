@@ -298,6 +298,9 @@ struct unpacked_state {
 }__attribute__((packed));
 
 
+uint8_t get_bits_per_pixel(struct waveform_data_header* header) {
+  return ((header->luts & 0xc) == 4) ? 5 : 4;
+}
 
 int bubble_sort(uint32_t* wav_addrs) {
   uint32_t i;
@@ -385,7 +388,7 @@ void print_header(struct waveform_data_header* header) {
   printf("  Number of modes in this waveform: %d\n", header->mc + 1);
   printf("  Number of temperature ranges in this waveform: %d\n", header->trc + 1);
 
-  printf("  4 or 5-bit mode: %u\n", ((header->luts & 0xc) == 4) ? 5 : 4);
+  printf("  4 or 5-bits per pixel: %u\n", get_bits_per_pixel(header));
 
   printf("\n");
 }
@@ -940,6 +943,13 @@ int main(int argc, char **argv) {
   if(header->filesize != st.st_size) {
     fprintf(stderr, "Actual file size does not match file size reported by waveform header\n");
     goto fail;
+  }
+
+  if(outfile) {
+    if(get_bits_per_pixel(header) != 4) {
+      fprintf(stderr, "This waveform uses 5 bits per pixel which is not yet support\n");
+      goto fail;
+    }
   }
 
   if(do_print) {
