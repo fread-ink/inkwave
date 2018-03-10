@@ -34,10 +34,10 @@ Options:
 # Limitations
 
 * Currently doesn't work on big-endian architectures.
-* Parsing .wrf metadata not yet supported
-* Waveforms using 5 bits per pixel not yet supported (only 4 bpp)
+* Waveforms using 5 bits per pixel not yet supported
+* For .wrf format currently only header is parsed
 
-# unsolved mysteries
+# Unsolved mysteries
 
 ## .wrf format
 

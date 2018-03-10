@@ -376,9 +376,11 @@ int add_addr(uint32_t* addrs, uint32_t addr, uint32_t max) {
   return -1;
 }
 
-void print_header(struct waveform_data_header* header) {
+void print_header(struct waveform_data_header* header, int is_wbf) {
   printf("Header info:\n");
-  printf("  File size (according to header): %d bytes\n", header->filesize);
+  if(is_wbf) {
+    printf("  File size (according to header): %d bytes\n", header->filesize);
+  }
   printf("  Serial number: %d\n", header->serial);
   printf("  Run type: 0x%x | %s\n", header->run_type, get_desc(run_types, header->run_type, NULL));
   printf("  Manufacturer code: 0x%x | %s\n", header->mfg_code, get_desc_mfg_code(header->mfg_code));
@@ -885,6 +887,8 @@ int main(int argc, char **argv) {
   int c;
   uint32_t unique_waveform_count;
   uint32_t wav_addrs[MAX_WAVEFORMS]; // waveform addresses in input file
+  uint32_t is_wbf;
+  size_t to_alloc;
 
   memset(wav_addrs, 0, sizeof(wav_addrs));
 
@@ -911,15 +915,34 @@ int main(int argc, char **argv) {
   infile_path = argv[optind];
 
   if(force_input) {
-    if(strncmp(force_input, "wbf", 3)) {
-      fprintf(stderr, "Currently only .wbf input files are supported.\n");
+    if(strncmp(force_input, "wbf", 3) == 0) {
+      is_wbf = 1;
+    } else if(strncmp(force_input, "wrf", 3) == 0) {
+      is_wbf = 0;
+    } else {
+      fprintf(stderr, "Only wbf and wrf format is supported\n");
       goto fail;
     }
-  } else if(strncmp(infile_path + strlen(infile_path) - 4, ".wbf", 4)) {
-    fprintf(stderr, "Currently only .wbf input files are supported.\n");
-    fprintf(stderr, "The input format is detected based on file extension.\n");
-    fprintf(stderr, "Consider using `-f wbf` to bypass this detection.\n");
-    goto fail;    
+  } else {
+    if(strlen(infile_path) < 4) {
+      fprintf(stderr, "File has neither .wbf or .wrf extension\n");
+      fprintf(stderr, "Consider using `-f` to bypass file format detection\n");
+      goto fail;
+    }
+    if(strncmp(infile_path + strlen(infile_path) - 4, ".wbf", 4) == 0) {
+      is_wbf = 1;
+    } else if(strncmp(infile_path + strlen(infile_path) - 4, ".wrf", 4) == 0) {
+      is_wbf = 0;
+    } else {
+      fprintf(stderr, "File has neither .wbf or .wrf extension\n");
+      fprintf(stderr, "Consider using `-f` to bypass file format detection\n");
+      goto fail;
+    }  
+  }
+
+  if(!is_wbf && outfile_path) {
+    fprintf(stderr, "Conversion from .wrf format not supported\n");
+    goto fail;
   }
 
   infile = fopen(infile_path, "r");
@@ -933,7 +956,13 @@ int main(int argc, char **argv) {
     goto fail;
   }
 
-  data = malloc(st.st_size);
+  if(is_wbf) {
+    to_alloc = st.st_size;
+  } else {
+    to_alloc = sizeof(struct waveform_data_header);
+  }
+
+  data = malloc(to_alloc);
   if(!data) {
     fprintf(stderr, "Failed to allocate %d bytes of memory: %s\n", (int) st.st_size, strerror(errno));
     goto fail;
@@ -953,11 +982,11 @@ int main(int argc, char **argv) {
 
   if(do_print) {
     printf("\n");
-    printf("File size: %d\n", (int) st.st_size);
+    printf("File size: %d bytes\n", (int) st.st_size);
     printf("\n");
   }
 
-  len = fread(data, 1, st.st_size, infile);
+  len = fread(data, 1, to_alloc, infile);
   if(len <= 0) {
     fprintf(stderr, "Reading file %s failed: %s\n", infile_path, strerror(errno));
     goto fail;
@@ -966,9 +995,11 @@ int main(int argc, char **argv) {
   // start of header
   header = (struct waveform_data_header*) data;
 
-  if(header->filesize != st.st_size) {
-    fprintf(stderr, "Actual file size does not match file size reported by waveform header\n");
-    goto fail;
+  if(is_wbf) {
+    if(header->filesize != st.st_size) {
+      fprintf(stderr, "Actual file size does not match file size reported by waveform header\n");
+      goto fail;
+    }
   }
 
   if(outfile) {
@@ -978,19 +1009,25 @@ int main(int argc, char **argv) {
     }
   }
 
-  if(compare_checksum(data, header) < 0)  {
-    fprintf(stderr, "Checksum error\n");
-    goto fail;
+  if(is_wbf) {
+    if(compare_checksum(data, header) < 0)  {
+      fprintf(stderr, "Checksum error\n");
+      goto fail;
+    }
   }
 
   if(do_print) {
-    print_header(header);
+    print_header(header, is_wbf);
     
     if(header->fpl_platform < 3) {
       printf("Modes: Unknown (no mode version specified)\n");
     } else {
       print_modes(header->mc + 1);
     }
+  }
+
+  if(!is_wbf) {
+    return 0;
   }
 
   if(outfile) {
