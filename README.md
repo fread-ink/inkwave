@@ -37,6 +37,22 @@ Options:
 * Parsing .wrf metadata not yet supported
 * Waveforms using 5 bits per pixel not yet supported (only 4 bpp)
 
+# unsolved mysteries
+
+## .wrf format
+
+All mode pointers in the .wrf file need to be offset by 63 bytes. Likely has something to do with how they are passed by the epdc kernel module to the epdc. This is defined as `MYSTERIOUS OFFSET` in the code.
+
+## .wbf format
+
+Each waveform segment ends with two bytes that do not appear to be part of the waveform itself. The first is always `0xff` and the second is unpredictable. Unfortunately `0xff` can occur inside of waveforms as well so it is not useful as an endpoint marker. The last byte might be a sort of checksum but does not appear to be a simple 1-byte sum like other 1-byte checksums used in .wbf files.
+
+## filesize zero
+
+From the kernel it looks like sometimes header->filesize can be zero. If this is the case there is a different method for calculating the checksum. 
+
+Look at `eink_get_computed_waveform_checksum` in `eink_waveform.c`.
+
 # License and copyright
 
 License: GPLv2. For full license text see the LICENSE file.

@@ -20,35 +20,6 @@
 // need to be offset by 63 bytes
 #define MYSTERIOUS_OFFSET (63)
 
-/*
-# unsolved mysteries
-
-## .wrf format
-
-All mode pointers in the .wrf file need to be offset by 63 bytes. Likely has something to do with how they are passed by the epdc kernel module to the epdc.
-
-## .wbf format
-
-Each waveform segment ends with two bytes that do not appear to be part of the waveform itself. The first is always `0xff` and the second is unpredictable. Unfortunately `0xff` can occur inside of waveforms as well so it is not useful as an endpoint marker. The last byte might be a sort of checksum but does not appear to be a simple 1-byte sum like other 1-byte checksums used in .wbf files.
-
-# format info
-
-The following is format info gleaned from open source header files or similar that hasn't yet been incorporated into this program.
-
-Some info gleaned from this marketing PDF on the Freescale website: http://www.freescale.com.cn/cstory/ftf/2010/pdf/0989.pdf
-
-## acronyms and terms
-
-* Global Update: Update entire screen
-* Full Update: Sending waveform to all pixels in a region
-* Partial Update: Only send waveform to pixels within region that need changing
-* Concurrent update: 
-* DU: Direct Update
-* AU: Animation Update
-* GU: Global Update or Grayscale Update
-
-*/
-
 #define MODE_INIT      (0x0)
 #define MODE_DU        (0x1)
 #define MODE_GC16      (0x2)
@@ -347,6 +318,8 @@ unsigned crc32(unsigned char *buf, int len) {
   
   return update_crc(crc_table, 0, buf, len);
 }
+
+// TODO 
 
 int compare_checksum(char* data, struct waveform_data_header* header) {
   unsigned int crc;
