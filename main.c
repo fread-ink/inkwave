@@ -302,6 +302,66 @@ uint8_t get_bits_per_pixel(struct waveform_data_header* header) {
   return ((header->luts & 0xc) == 4) ? 5 : 4;
 }
 
+
+void compute_crc_table(unsigned int* crc_table) {
+   unsigned c;
+   int n, k;
+   for (n = 0; n < 256; n++) {
+      c = (unsigned) n;
+      for (k = 0; k < 8; k++) {
+         if (c & 1) {
+            c = 0xedb88320L ^ (c >> 1);
+         }
+         else {
+            c = c >> 1;
+         }
+      }
+      crc_table[n] = c;
+   }
+}
+
+
+unsigned int update_crc(unsigned int* crc_table, unsigned crc,
+                           unsigned char *buf, int len) {
+
+  char b;
+  unsigned c = crc ^ 0xffffffff;
+  int i;
+  
+  for(i=0; i < len; i++) {
+    if(!buf) {
+      b = 0;
+    } else {
+      b = buf[i];
+    }
+    c = crc_table[(c ^ b) & 0xff] ^ (c >> 8);
+  }
+  
+  return c ^ 0xffffffff;
+}
+
+unsigned crc32(unsigned char *buf, int len) {
+  static unsigned int crc_table[256];
+  
+  compute_crc_table(crc_table);
+  
+  return update_crc(crc_table, 0, buf, len);
+}
+
+int compare_checksum(char* data, struct waveform_data_header* header) {
+  unsigned int crc;
+  unsigned int crc_table[256];
+  compute_crc_table(crc_table);
+  crc = update_crc(crc_table, 0, NULL, 4);
+  crc = update_crc(crc_table, crc, data+4, header->filesize - 4);
+
+  if(crc != header->checksum) {
+    return -1;
+  }
+  return 0;
+}
+  
+
 int bubble_sort(uint32_t* wav_addrs) {
   uint32_t i;
   uint32_t j;
@@ -811,12 +871,6 @@ int write_header(FILE* outfile, struct waveform_data_header* header) {
   return 0;
 }
 
-int check() {
-
-  // TODO:
-  // * check checksum
-}
-
 void usage(FILE* fd) {
   fprintf(fd, "\n");
   fprintf(fd, "Usage: inkwave file.wbf/file.wrf [-o output.wrf]\n");
@@ -836,7 +890,6 @@ void usage(FILE* fd) {
   fprintf(fd, "  -h: Display this help message.\n");
   fprintf(fd, "\n");
 }
-
 
 int main(int argc, char **argv) {
 
@@ -950,6 +1003,11 @@ int main(int argc, char **argv) {
       fprintf(stderr, "This waveform uses 5 bits per pixel which is not yet support\n");
       goto fail;
     }
+  }
+
+  if(compare_checksum(data, header) < 0)  {
+    fprintf(stderr, "Checksum error\n");
+    goto fail;
   }
 
   if(do_print) {
