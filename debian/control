@@ -1,0 +1,18 @@
+Source: inkwave
+Section: utils
+Priority: optional
+Maintainer: Marc Juul <juul@fread.ink>
+Build-Depends: debhelper (>= 8.0.0), autotools-dev
+Standards-Version: 3.9.4
+Homepage: https://github.com/fread-ink/inkwave
+Vcs-Git: git://git@github.com:fread-ink/inkwave.git
+Vcs-Browser: https://github.com/fread-ink/inkwave
+
+Package: inkwave
+Architecture: armhf
+Depends: libc6 (>= 2.4)
+Description: Convert electronic paper display waveforms from .wbf to .wrf format 
+ inkwave is a command-line utility for converting .wbf to .wrf files 
+ and displaying meta-data information from .wbf and .wrf files 
+ in a human readable format.
+

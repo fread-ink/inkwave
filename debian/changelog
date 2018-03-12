@@ -1,0 +1,5 @@
+inkwave (0.0.1-1) unstable; urgency=low
+
+  * Initial release (Closes: #nnnn)  <nnnn is the bug number of your ITP>
+
+ -- Marc Juul <juul@fread.ink>  Mon, 12 Mar 2018 01:15:56 -0700
