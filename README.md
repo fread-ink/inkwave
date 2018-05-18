@@ -1,3 +1,4 @@
+# inkwave
 
 inkwave is a command-line utility for converting `.wbf` to `.wrf` files and displaying meta-data information from `.wbf` and `.wrf` files in a human readable format.
 
