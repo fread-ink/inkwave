@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <ctype.h>
 #include <sys/stat.h>
+#include <arpa/inet.h>
 
 // there probably aren't any displays with more waveforms than this (we hope)
 // (technically the header allows for 256 * 256 waveforms but that's not realistic)
@@ -165,6 +166,8 @@ Pair waveform_tuning_biases[] = {
   {0x02, "Increased DS Blooming V220/V220E"},
   {0x00, NULL}
 };
+
+int write_table(uint32_t table_addr, uint32_t* addrs, FILE* outfile, uint32_t max);
 
 const char* get_desc(Pair table[], unsigned int key, const char* def) {
   int i = 0;
