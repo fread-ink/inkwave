@@ -54,11 +54,15 @@ From the kernel it looks like sometimes header->filesize can be zero. If this is
 
 Look at `eink_get_computed_waveform_checksum` in `eink_waveform.c`.
 
+# ToDo
+
+Check `eink_waveform.c` in newer Kindle kernel releases. Might have more info.
+
 # License and copyright
 
 License: GPLv2. For full license text see the LICENSE file.
 
-* Copyright 2018 Marc Juul
+* Copyright 2018, 2021 Marc Juul
 * Copyright 2005-2017 Amazon Technologies, Inc.
 * Copyright 2004-2013 Freescale Semiconductor, Inc.
 

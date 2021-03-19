@@ -78,6 +78,7 @@ Pair mfg_codes[] = {
   {0xA6, "2nd LGD Whitney Line"},
   {0xA7, "Unknown LGD panel"},
   {0xA8, "Unknown LGD panel"},
+  {0xCA, "reMarkable panel?"},
   {0x00, NULL}
 };
 
@@ -103,18 +104,27 @@ Pair run_types[] = {
 };
 
 Pair fpl_platforms[] = {
-  {0x00, "2.0"},
-  {0x01, "2.1"},
-  {0x02, "2.3"},
-  {0x03, "V110"},
-  {0x04, "V110A"},
-  {0x06, "V220"},
-  {0x07, "V250"},
-  {0x08, "V220E"},
+  {0x00, "Matrix 2.0"},
+  {0x01, "Matrix 2.1"},
+  {0x02, "Matrix 2.3 / Matrix Vixplex (V100)"},
+  {0x03, "Matrix Vizplex 110 (V110)"},
+  {0x04, "Matrix Vizplex 110A (V110A)"},
+                        {0x05, "Matrix Vizplex unknown"},
+  {0x06, "Matrix Vizplex 220 (V220)"},
+  {0x07, "Matrix Vizplex 250 (V250)"},
+  {0x08, "Matrix Vizplex 220E (V220E)"},
   {0x00, NULL}
 };
 
 Pair fpl_sizes[] = {
+  {0x00, "5.0\""},
+  {0x01, "6.0\""},
+  {0x02, "6.1\""},
+  {0x03, "6.3\""},
+  {0x04, "8.0\""},
+  {0x05, "9.7\""},
+  {0x06, "9.9\""},
+  {0x07, "Unknown"},
   {0x32, "5\", unknown resolution"},
   {0x3C, "6\", 800x600"},
   {0x3D, "6.1\", 1024x768"},
@@ -145,8 +155,27 @@ Pair mode_versions[] = {
 
 
 Pair waveform_types[] = {
+  {0x00, "WX"},
+  {0x01, "WY"},
+  {0x02, "WP"},
+  {0x03, "WZ"},
+  {0x04, "WQ"},
+  {0x05, "TA"},
+  {0x06, "WU"},
+  {0x07, "TB"},
+  {0x08, "TD"},
+  {0x09, "WV"},
+  {0x0A, "WT"},
   {0x0B, "TE"},
+  {0x0C, "XA"},
+  {0x0D, "XB"},
   {0x0E, "WE"},
+  {0x0F, "WD"},
+  {0x10, "XC"},
+  {0x11, "VE"},
+  {0x12, "XD"},
+  {0x13, "XE"},
+  {0x14, "XF"},
   {0x15, "WJ"},
   {0x16, "WK"},
   {0x17, "WL"},
@@ -164,6 +193,10 @@ Pair waveform_tuning_biases[] = {
   {0x00, "Standard"},
   {0x01, "Increased DS Blooming V110/V110E"},
   {0x02, "Increased DS Blooming V220/V220E"},
+  {0x03, "Improved temperature range"},
+  {0x04, "GC16 fast"},
+  {0x05, "GC16 fast, GL16 fast"},
+  {0x06, "Unknown"},  
   {0x00, NULL}
 };
 
@@ -732,7 +765,7 @@ int check_xwia(char* xwia, int do_print) {
 
   if(do_print) {
     
-    printf("Extra Waveform Info (xwia): ");
+    printf("Extra Waveform Info (probably waveform's original filename): ");
 
     if(!xwia_len) {
       printf("None");
