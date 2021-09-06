@@ -1,0 +1,25 @@
+builddir = .
+
+appName=inkwave
+destdir=/usr/local
+cc=gcc
+
+installedBinaryPath=${destdir}/$appName
+
+build all: phony $appName
+build install: phony $installedBinaryPath
+
+rule build
+ description = build $out
+ deps = gcc
+ depfile = $out.d
+ command = $cc -MD -MF $out.d -O3 -o $out $in
+
+rule install
+ description = Installing $out
+ command = sh -c "mkdir -p `dirname $out` && install -m 0755 $in $out"
+
+build $appName: build main.c
+build $installedBinaryPath: install $appName
+
+default all
