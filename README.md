@@ -71,3 +71,6 @@ License: GPLv2. For full license text see the LICENSE file.
 E Ink is a registered trademark of the E Ink Corporation.
 
 Neither the E Ink Corporation, nor Freescale Semiconductor Inc. nor Amazon Technologies Inc are in any way affiliated with fread nor this git project nor any of the authors of this project and neither fread nor this git project is in any way endorsed by any of these organizations.
+
+# Related projects
+* [An impl in Python](https://github.com/KOLANICH-tools/inkwave.py)
