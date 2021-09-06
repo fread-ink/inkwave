@@ -328,8 +328,7 @@ void compute_crc_table(unsigned int* crc_table) {
 }
 
 
-unsigned int update_crc(unsigned int* crc_table, unsigned crc,
-                           unsigned char *buf, int len) {
+unsigned int update_crc(unsigned int* crc_table, unsigned crc, uint8_t *buf, int len) {
 
   char b;
   unsigned c = crc ^ 0xffffffff;
@@ -550,7 +549,7 @@ uint16_t parse_waveform(char* data, uint32_t* wav_addrs, uint32_t wav_addr, FILE
   return state_count;
 }
 
-int parse_temp_ranges(struct waveform_data_header* header, char* data, char* tr_start, uint8_t tr_count, uint32_t* wav_addrs, int first_pass, FILE* outfile, int do_print) {
+int parse_temp_ranges(struct waveform_data_header* header, int8_t* data, int8_t* tr_start, uint8_t tr_count, uint32_t* wav_addrs, int first_pass, FILE* outfile, int do_print) {
   struct pointer* tr;
   uint8_t checksum;
   uint8_t i;
@@ -675,7 +674,7 @@ int parse_temp_ranges(struct waveform_data_header* header, char* data, char* tr_
 }
 
 
-int parse_modes(struct waveform_data_header* header, char* data, char* mode_start, uint8_t mode_count, uint8_t temp_range_count, uint32_t* wav_addrs, int first_pass, FILE* outfile, int do_print) {
+int parse_modes(struct waveform_data_header* header, int8_t* data, int8_t* mode_start, uint8_t mode_count, uint8_t temp_range_count, uint32_t* wav_addrs, int first_pass, FILE* outfile, int do_print) {
   struct pointer* mode;
   uint8_t checksum;
   uint8_t i;
@@ -786,7 +785,7 @@ int check_xwia(char* xwia, int do_print) {
   return 0;
 }
 
-int parse_temp_range_table(char* table, uint8_t range_count, FILE* outfile, int do_print) {
+int parse_temp_range_table(int8_t* table, uint8_t range_count, FILE* outfile, int do_print) {
   uint8_t i;
   uint8_t checksum;
   struct temp_range range;
@@ -904,14 +903,14 @@ void usage(FILE* fd) {
 
 int main(int argc, char **argv) {
 
-  char* data;
+  int8_t* data;
   char* infile_path;
   FILE* infile = NULL;
   size_t len;
   struct waveform_data_header* header; // points to `data` at beginning of header
   struct stat st;
-  char* modes; // points to `data` where the modes table begins
-  char* temp_range_table; // points to `data` where the temp range table begins
+  int8_t* modes; // points to `data` where the modes table begins
+  int8_t* temp_range_table; // points to `data` where the temp range table begins
   uint32_t xwia_len;
   uint8_t mode_count;
   uint8_t temp_range_count;
