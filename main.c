@@ -328,7 +328,8 @@ void compute_crc_table(unsigned int* crc_table) {
 }
 
 
-unsigned int update_crc(unsigned int* crc_table, unsigned crc, uint8_t *buf, int len) {
+unsigned int update_crc(unsigned int* crc_table, unsigned crc,
+                           int8_t *buf, int len) {
 
   char b;
   unsigned c = crc ^ 0xffffffff;
@@ -346,7 +347,7 @@ unsigned int update_crc(unsigned int* crc_table, unsigned crc, uint8_t *buf, int
   return c ^ 0xffffffff;
 }
 
-unsigned crc32(unsigned char *buf, int len) {
+unsigned crc32(int8_t *buf, int len) {
   static unsigned int crc_table[256];
   
   compute_crc_table(crc_table);
@@ -356,7 +357,7 @@ unsigned crc32(unsigned char *buf, int len) {
 
 // TODO 
 
-int compare_checksum(char* data, struct waveform_data_header* header) {
+int compare_checksum(int8_t* data, struct waveform_data_header* header) {
   unsigned int crc;
   unsigned int crc_table[256];
   compute_crc_table(crc_table);
@@ -477,7 +478,7 @@ uint32_t get_waveform_length(uint32_t* wav_addrs, uint32_t wav_addr) {
   return 0;
 }
 
-uint16_t parse_waveform(char* data, uint32_t* wav_addrs, uint32_t wav_addr, FILE* outfile) {
+uint32_t parse_waveform(int8_t* data, uint32_t* wav_addrs, uint32_t wav_addr, FILE* outfile) {
   uint32_t i, j;
   struct packed_state* s;
   struct unpacked_state u;
@@ -485,8 +486,8 @@ uint16_t parse_waveform(char* data, uint32_t* wav_addrs, uint32_t wav_addr, FILE
   int fc_active;
   int zero_pad;
   size_t written;
-  uint16_t state_count = 0;
-  char* waveform = data + wav_addr;
+  uint32_t state_count = 0;
+  int8_t* waveform = data + wav_addr;
 
   // TODO
   // We are cutting off the last two bytes
@@ -553,7 +554,7 @@ int parse_temp_ranges(struct waveform_data_header* header, int8_t* data, int8_t*
   struct pointer* tr;
   uint8_t checksum;
   uint8_t i;
-  uint16_t state_count;
+  uint32_t state_count;
   size_t written;
   long ftable;
   long fprev;
@@ -744,7 +745,7 @@ int parse_modes(struct waveform_data_header* header, int8_t* data, int8_t* mode_
   return 0;
 }
 
-int check_xwia(char* xwia, int do_print) {
+int check_xwia(int8_t* xwia, int do_print) {
   uint8_t xwia_len;
   uint8_t i;
   uint8_t checksum;
@@ -997,7 +998,7 @@ int main(int argc, char **argv) {
     to_alloc = sizeof(struct waveform_data_header);
   }
 
-  data = malloc(to_alloc);
+  data = (int8_t*) malloc(to_alloc);
   if(!data) {
     fprintf(stderr, "Failed to allocate %d bytes of memory: %s\n", (int) st.st_size, strerror(errno));
     goto fail;
