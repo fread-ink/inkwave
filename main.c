@@ -527,7 +527,7 @@ uint16_t parse_waveform(char* data, uint32_t* wav_addrs, uint32_t wav_addr, FILE
       i += 2;
     }
 
-    state_count += count * 4;
+    state_count += count;
 
     if(outfile) {
 
@@ -627,7 +627,7 @@ int parse_temp_ranges(struct waveform_data_header* header, char* data, char* tr_
       }
 
       if(do_print) {
-        printf("%4u phases\n", state_count / 256);
+        printf("%4u phases\n", state_count >> 6);
       }
 
       if(outfile) {
@@ -641,12 +641,19 @@ int parse_temp_ranges(struct waveform_data_header* header, char* data, char* tr_
           return -1;
         }
 
-        state_count = htons(state_count);
-        // write state count
-        written = fwrite(&state_count, sizeof(state_count), 1, outfile);
-        if(written != 1) {
-          fprintf(stderr, "Error writing state count to output file: %s\n", strerror(errno));
+        if(state_count > 0x3FFF){
+          fprintf(stderr, "state_count when shifted would occupy 4 bytes: %d\n", state_count);
           return -1;
+        }
+        {
+          uint16_t state_count_uint16_t = state_count << 2;
+          state_count_uint16_t = htons(state_count_uint16_t);
+          // write state count
+          written = fwrite(&state_count_uint16_t, sizeof(state_count_uint16_t), 1, outfile);
+          if(written != 1) {
+            fprintf(stderr, "Error writing state count to output file: %s\n", strerror(errno));
+            return -1;
+          }
         }
 
         // restore file position to end of previously written data
