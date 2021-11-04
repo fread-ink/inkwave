@@ -817,7 +817,7 @@ int parse_temp_range_table(char* table, uint8_t range_count, FILE* outfile, int 
 
   if(outfile) {
     written = fwrite(table, 1, range_count+1, outfile);
-    if(written != range_count+1) {
+    if(written != range_count+1u) {
       fprintf(stderr, "Error writing temperature range table to output file: %s\n", strerror(errno));
       return -1;
     }
@@ -831,7 +831,7 @@ int parse_temp_range_table(char* table, uint8_t range_count, FILE* outfile, int 
 }
 
 int write_table(uint32_t table_addr, uint32_t* addrs, FILE* outfile, uint32_t max) {
-  int i;
+  uint32_t i;
   size_t written;
   uint32_t addr;
   long prev;
