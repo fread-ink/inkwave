@@ -461,6 +461,22 @@ void print_header(struct waveform_data_header* header, int is_wbf) {
 
   printf("  4 or 5-bits per pixel: %u\n", get_bits_per_pixel(header));
 
+  printf("\tunknown0: 0x%x\n", header->unknown0);
+  printf("\tvcom_shifted: %d\n", header->vcom_shifted);
+  printf("\textra waveform info (xwia) offset: 0x%x\n", header->xwia);
+
+  printf("\tcs1: 0x%x\n", header->cs1);
+  printf("\twaveform modes table offset: 0x%x\n", header->wmta);
+  printf("\tfvsn: 0x%x\n", header->fvsn);
+  printf("\tluts: 0x%x\n", header->luts);
+  printf("\tadvanced_wfm_flags: 0x%x\n", header->advanced_wfm_flags);
+  printf("\teb: 0x%x\n", header->eb);
+  printf("\tsb: 0x%x\n", header->sb);
+  if(header->reserved0_1 || header->reserved0_2 || header->reserved0_3 || header->reserved0_4 || header->reserved0_5){
+    printf("\treserved_or_unkn: %x %x %x %x %x\n", header->reserved0_1, header->reserved0_2, header->reserved0_3, header->reserved0_4, header->reserved0_5);
+  }
+  printf("\tcs2: 0x%x\n", header->cs2);
+
   printf("\n");
 }
 
