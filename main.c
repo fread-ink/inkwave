@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <errno.h>
 #include <string.h>
 #include <unistd.h>
@@ -217,7 +218,7 @@ const char* get_desc(Pair table[], unsigned int key, const char* def) {
   }
 }
 
-void print_modes(uint8_t mode_count) {
+void print_modes(uint8_t mode_count, int do_print) {
   uint8_t i;
   const char* desc;
 
@@ -478,8 +479,8 @@ uint32_t get_waveform_length(uint32_t* wav_addrs, uint32_t wav_addr) {
   return 0;
 }
 
-uint16_t parse_waveform(char* data, uint32_t* wav_addrs, uint32_t wav_addr, FILE* outfile) {
-  uint32_t i, j;
+uint16_t parse_waveform(char* data, uint32_t* wav_addrs, uint32_t wav_addr, FILE* outfile, int do_print) {
+  uint32_t i, j, k;
   struct packed_state* s;
   struct unpacked_state u;
   uint16_t count;
@@ -502,16 +503,25 @@ uint16_t parse_waveform(char* data, uint32_t* wav_addrs, uint32_t wav_addr, FILE
   fc_active = 0;
   zero_pad = 0;
   i = 0;
+  k = 0;
   while(i < len - 1) {
+    if(do_print == 2){
+        printf("%d, %hhx\n", i, waveform[i]);
+    }
     // 0xfc is a start and end tag for a section
     // of one-byte bit-patterns with an assumed count of 1
     if((uint8_t) waveform[i] == 0xfc) {
       fc_active = (fc_active) ? 0 : 1;
       i++;
+      ++k;
       continue;
     }
 
     s = (struct packed_state*) waveform + i;
+
+    if(do_print == 2){
+        printf("s (%d, %d, %d, %d) %d\n", s->s0, s->s1, s->s2, s->s3, k);
+    }
 
     if(fc_active) { // 1-byte pattern (count is always 1)
       count = 1;
@@ -525,6 +535,10 @@ uint16_t parse_waveform(char* data, uint32_t* wav_addrs, uint32_t wav_addr, FILE
       }
       zero_pad = 0;
       i += 2;
+    }
+
+    if(do_print == 2){
+        printf("count %d %d\n", count, k);
     }
 
     state_count += count * 4;
@@ -545,6 +559,7 @@ uint16_t parse_waveform(char* data, uint32_t* wav_addrs, uint32_t wav_addr, FILE
         }
       }
     }
+    ++k;
   }
 
   return state_count;
@@ -621,13 +636,15 @@ int parse_temp_ranges(struct waveform_data_header* header, char* data, char* tr_
           return -1;
         }
       }
-      state_count = parse_waveform(data, wav_addrs, tr->addr, outfile);
+      state_count = parse_waveform(data, wav_addrs, tr->addr, outfile, do_print);
       if(state_count < 0) {
         return -1;
       }
 
-      if(do_print) {
+      if(do_print == 1) {
         printf("%4u phases\n", state_count / 256);
+      } else if(do_print == 2) {
+        printf("%4u phases (%4u)\n", state_count / 256, tr->addr);
       }
 
       if(outfile) {
@@ -893,6 +910,7 @@ void usage(FILE* fd) {
   fprintf(fd, "Options:\n");
   fprintf(fd, "\n");
   fprintf(fd, "  -o: Specify output file.\n");
+  fprintf(fd, "  -t: Enable extended tracing needed for testing of identicity of the behavior of different impls.\n");
   fprintf(fd, "\n");
   fprintf(fd, "  -f wrf/wbf: Force inkwave to interpret input file\n");
   fprintf(fd, "              as either .wrf or .wbf format\n");
@@ -928,13 +946,16 @@ int main(int argc, char **argv) {
 
   memset(wav_addrs, 0, sizeof(wav_addrs));
 
-  while((c = getopt(argc, argv, "o:f:h")) != -1) {
+  while((c = getopt(argc, argv, "to:f:h")) != -1) {
     switch (c) {
     case 'o':
       outfile_path = optarg;
       break;
     case 'f':
       force_input = optarg;
+      break;
+    case 't':
+      do_print = 2;
       break;
     case 'h':
       usage(stdout);
@@ -1012,7 +1033,7 @@ int main(int argc, char **argv) {
     }
   }
 
-  if(!outfile) {
+  if(!outfile && !do_print) {
     do_print = 1;
   }
 
@@ -1058,7 +1079,7 @@ int main(int argc, char **argv) {
     if(header->fpl_platform < 3) {
       printf("Modes: Unknown (no mode version specified)\n");
     } else {
-      print_modes(header->mc + 1);
+      print_modes(header->mc + 1, do_print);
     }
   }
 
