@@ -1101,7 +1101,7 @@ int main(int argc, char **argv) {
 
   // first byte of xwia contains the length
   // last byte after xwia is a checksum
-  modes = data + header->xwia + 1 + xwia_len + 1;
+  modes = data + header->wmta;
 
   if(parse_modes(header, data, modes, header->mc + 1, header->trc + 1, wav_addrs, 1, NULL, 0) < 0) {
     fprintf(stderr, "Parse error during first pass\n");
